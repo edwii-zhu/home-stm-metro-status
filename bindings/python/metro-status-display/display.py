@@ -21,13 +21,24 @@ class MetroDisplay:
         self.options.cols = 64
         self.options.chain_length = 1
         self.options.parallel = 1
-        self.options.hardware_mapping = "adafruit-hat"  # Use Adafruit HAT
+        self.options.hardware_mapping = (
+            "regular"  # Changed from adafruit-hat to regular
+        )
         self.options.gpio_slowdown = 4
-        self.options.drop_privileges = False
+        self.options.drop_privileges = True  # Changed to True for better compatibility
         self.options.brightness = 50  # Adjust brightness (0-100)
 
-        # Initialize the matrix
-        self.matrix = RGBMatrix(options=self.options)
+        # Initialize the matrix with error handling
+        try:
+            self.matrix = RGBMatrix(options=self.options)
+            logging.info("Matrix initialized successfully")
+        except Exception as e:
+            logging.error(f"Failed to initialize matrix: {e}")
+            logging.error(
+                "Please ensure you have the correct permissions and hardware connected"
+            )
+            sys.exit(1)
+
         self.image = Image.new("RGB", (64, 32))
         self.draw = ImageDraw.Draw(self.image)
 
