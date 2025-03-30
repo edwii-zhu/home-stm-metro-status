@@ -638,6 +638,11 @@ def run_mock_metro(extended=False, duration_minutes=5):
     """Run a mock metro process that outputs sample data."""
     data_generator = SampleDataGenerator()
 
+    # Log the start of the mock process
+    logging.info(
+        f"Starting mock metro process (extended={extended}, duration={duration_minutes}m)"
+    )
+
     # Define time periods to simulate - base scenario for operating hours
     operating_periods = [
         "morning_peak",
@@ -678,10 +683,13 @@ def run_mock_metro(extended=False, duration_minutes=5):
         time_per_period = max(5, int(seconds_per_hour))  # At least 5 seconds per period
 
         # Log the simulation plan
-        logging.info(
-            f"Simulating a full day cycle with {len(full_day_sequence)} time periods"
+        sys.stderr.write(
+            f"Simulating a full day cycle with {len(full_day_sequence)} time periods\n"
         )
-        logging.info(f"Each period will last ~{time_per_period} seconds of real time")
+        sys.stderr.write(
+            f"Each period will last ~{time_per_period} seconds of real time\n"
+        )
+        sys.stderr.flush()
 
         # Run the time sequence simulation
         start_time = time.time()
@@ -707,8 +715,10 @@ def run_mock_metro(extended=False, duration_minutes=5):
             current_data["simulated_hour"] = hour
             current_data["is_operating"] = is_operating
 
-            # Output data
-            print(json.dumps(current_data), flush=True)
+            # Output data - ensure we end with a newline and flush
+            json_output = json.dumps(current_data)
+            sys.stdout.write(json_output + "\n")
+            sys.stdout.flush()
 
             # Sleep for a bit
             time.sleep(min(5, time_per_period / 3))  # Multiple updates per period
@@ -719,9 +729,10 @@ def run_mock_metro(extended=False, duration_minutes=5):
                 period_index = (period_index + 1) % len(full_day_sequence)
                 period_start_time = current_time
                 hour, period = full_day_sequence[period_index]
-                logging.info(
-                    f"Simulating {hour}:00 - {period.upper()}, Operating: {period != 'closed'}"
+                sys.stderr.write(
+                    f"Simulating {hour}:00 - {period.upper()}, Operating: {period != 'closed'}\n"
                 )
+                sys.stderr.flush()
 
     else:
         # Simple operating-only time period rotation
@@ -739,16 +750,21 @@ def run_mock_metro(extended=False, duration_minutes=5):
                 add_alert=(period_index % 3 == 0),  # Add alert every 3rd period
             )
 
-            # Output data
-            print(json.dumps(sample_data), flush=True)
+            # Output data - ensure we end with a newline and flush
+            json_output = json.dumps(sample_data)
+            sys.stdout.write(json_output + "\n")
+            sys.stdout.flush()
 
             # Sleep for a bit
-            time.sleep(10)  # Update every 10 seconds
+            time.sleep(3)  # Update every 3 seconds for more frequent updates
 
             # Move to next period occasionally
-            if time.time() % 30 < 0.5:  # Switch approximately every 30 seconds
+            if time.time() % 15 < 0.1:  # Switch approximately every 15 seconds
                 period_index = (period_index + 1) % len(operating_periods)
-                logging.info(f"Switching to period: {operating_periods[period_index]}")
+                sys.stderr.write(
+                    f"Switching to period: {operating_periods[period_index]}\n"
+                )
+                sys.stderr.flush()
 
 
 def test_manual(extended=False, duration_minutes=30):
@@ -778,12 +794,9 @@ def test_manual(extended=False, duration_minutes=30):
     logging.info("  Weekdays: 5:30 AM - 12:30 AM")
     logging.info("  Weekends: 5:30 AM - 1:00 AM")
 
-    # Start the runner
-    runner = MetroDisplayRunner()
-
     try:
-        # Override the metro process to use our mock
-        runner.metro_process = subprocess.Popen(
+        # Create a mock metro process that outputs directly to stdout
+        metro_process = subprocess.Popen(
             [
                 sys.executable,
                 __file__,
@@ -794,16 +807,22 @@ def test_manual(extended=False, duration_minutes=30):
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True,  # Use text mode
         )
 
-        # Start the display process
-        runner.display_process = subprocess.Popen(
+        # Start the display process and connect it to the metro process output
+        display_process = subprocess.Popen(
             [sys.executable, "display.py"],
-            stdin=runner.metro_process.stdout,
+            stdin=metro_process.stdout,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            universal_newlines=True,  # Use text mode
         )
+
+        # Close the metro stdout handle in the parent process
+        # This is important to avoid deadlocks
+        metro_process.stdout.close()
 
         # Monitor processes
         start_time = time.time()
@@ -812,14 +831,36 @@ def test_manual(extended=False, duration_minutes=30):
         logging.info(f"Test running for {duration_minutes} minutes...")
         logging.info(f"Press Ctrl+C to stop the test at any time")
 
-        while time.time() < end_time and runner.running:
+        # Set up non-blocking reads for stderr
+        import fcntl
+        import os
+        import select
+
+        # Make stderr non-blocking
+        for fd in [metro_process.stderr.fileno(), display_process.stderr.fileno()]:
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+        while time.time() < end_time:
             # Check if processes are still running
-            if runner.metro_process.poll() is not None:
-                logging.error("Metro process terminated unexpectedly")
+            if metro_process.poll() is not None:
+                logging.error(
+                    f"Metro process terminated with code {metro_process.returncode}"
+                )
+                # Print any error output
+                metro_stderr = metro_process.stderr.read()
+                if metro_stderr:
+                    logging.error(f"Metro process error: {metro_stderr}")
                 break
 
-            if runner.display_process.poll() is not None:
-                logging.error("Display process terminated unexpectedly")
+            if display_process.poll() is not None:
+                logging.error(
+                    f"Display process terminated with code {display_process.returncode}"
+                )
+                # Print any error output
+                display_stderr = display_process.stderr.read()
+                if display_stderr:
+                    logging.error(f"Display process error: {display_stderr}")
                 break
 
             # Log progress every minute
@@ -831,12 +872,51 @@ def test_manual(extended=False, duration_minutes=30):
                     f"Test running for {minutes_elapsed} minutes... ({remaining} minutes remaining)"
                 )
 
-            time.sleep(1)
+            # Use select to check for available stderr output
+            ready_to_read, _, _ = select.select(
+                [metro_process.stderr, display_process.stderr],
+                [],
+                [],
+                0.1,  # Small timeout
+            )
+
+            # Read any available stderr output
+            for stderr in ready_to_read:
+                try:
+                    line = stderr.readline()
+                    if line:
+                        source = (
+                            "Metro" if stderr == metro_process.stderr else "Display"
+                        )
+                        logging.info(f"{source}: {line.strip()}")
+                except Exception as e:
+                    logging.error(f"Error reading stderr: {e}")
+
+            time.sleep(0.1)  # Short sleep to prevent CPU usage
 
     except KeyboardInterrupt:
         logging.info("Test interrupted by user")
+    except Exception as e:
+        logging.error(f"Error in test: {e}")
     finally:
-        runner.cleanup()
+        # Cleanup
+        try:
+            if "metro_process" in locals() and metro_process.poll() is None:
+                metro_process.terminate()
+                try:
+                    metro_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    metro_process.kill()
+
+            if "display_process" in locals() and display_process.poll() is None:
+                display_process.terminate()
+                try:
+                    display_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    display_process.kill()
+        except Exception as e:
+            logging.error(f"Error during cleanup: {e}")
+
         logging.info("Manual test completed")
 
 
@@ -869,6 +949,57 @@ if __name__ == "__main__":
                 pass
 
         test_manual(extended=extended, duration_minutes=duration)
+    elif "--simple-test" in sys.argv:
+        # Run a very simple test that just outputs predefined JSON data
+        # This is helpful for debugging display issues directly
+        try:
+            # Generate simpler valid JSON data
+            data_generator = SampleDataGenerator()
+
+            # Define some simple test periods to cycle through
+            test_periods = [
+                {"period": "morning_peak", "operating": True},
+                {"period": "off_peak", "operating": True},
+                {"period": "afternoon_peak", "operating": True},
+                {"period": "late_evening", "operating": True},
+                {"period": "closed", "operating": False},  # Test closed state
+            ]
+
+            sys.stderr.write("Starting simple test with basic metro status data\n")
+            sys.stderr.flush()
+
+            # Output data indefinitely until interrupted
+            period_index = 0
+            while True:
+                period_info = test_periods[period_index]
+                period = period_info["period"]
+                operating = period_info["operating"]
+
+                # Generate data
+                data = data_generator.generate_data(
+                    time_period=period, is_operating=operating
+                )
+
+                # Output the JSON data with proper formatting
+                json_str = json.dumps(data)
+                sys.stdout.write(json_str + "\n")
+                sys.stdout.flush()
+
+                # Log to stderr (won't interfere with stdout JSON data)
+                sys.stderr.write(
+                    f"Sent data for period: {period}, operating: {operating}\n"
+                )
+                sys.stderr.flush()
+
+                # Cycle to next period
+                period_index = (period_index + 1) % len(test_periods)
+
+                # Sleep between updates
+                time.sleep(5)
+
+        except KeyboardInterrupt:
+            sys.stderr.write("Simple test interrupted\n")
+            sys.stderr.flush()
     else:
         # Run automated tests
         unittest.main()
