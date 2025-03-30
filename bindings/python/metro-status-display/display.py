@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw, ImageFont
 import json
 from datetime import datetime
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -42,53 +43,92 @@ class MetroDisplay:
         self.image = Image.new("RGB", (64, 32))
         self.draw = ImageDraw.Draw(self.image)
 
-        # Load fonts - try bitmap fonts specifically optimized for LED matrices
+        # Load fonts - prioritize tom-thumb BDF font for LED matrices
         try:
-            # Font paths for Raspberry Pi OS
-            font_paths = [
-                # Common Raspberry Pi OS font paths
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Common on Pi
-                "/usr/share/fonts/truetype/piboto/PibotoLt-Regular.ttf",  # Pi-specific font
-                "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSansMono.ttf",  # Alternative path
-                # Fallback system fonts
-                "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-                # Final fallback - use default font
-                "DejaVuSansMono.ttf",
+            # Look for tom-thumb BDF font in user's font directory
+            bdf_font_paths = [
+                "~/.local/share/fonts/tom-thumb.bdf",
+                "/home/pi/.local/share/fonts/tom-thumb.bdf",
             ]
 
-            # Try each font until one works
+            # Try to load BDF font first (best for LED matrix)
             font_loaded = False
-            for font_path in font_paths:
+            for bdf_path in bdf_font_paths:
                 try:
-                    # Try different font sizes for better LED matrix rendering
-                    if font_path == "DejaVuSansMono.ttf":  # Default font
-                        self.font_small = ImageFont.truetype(font_path, 5)
-                        self.font_large = ImageFont.truetype(font_path, 7)
-                    else:  # Specific path
-                        self.font_small = ImageFont.truetype(font_path, 5)
-                        self.font_large = ImageFont.truetype(font_path, 7)
+                    # Expand user path if it starts with ~
+                    if bdf_path.startswith("~"):
+                        bdf_path = os.path.expanduser(bdf_path)
 
-                    logging.info(f"Successfully loaded font: {font_path}")
-                    font_loaded = True
-                    break
+                    # Check if file exists
+                    if os.path.exists(bdf_path):
+                        # Use fontTools to load BDF font
+                        from PIL import BdfFontFile, PcfFontFile, ImageFont
+
+                        # Load the BDF font
+                        with open(bdf_path, "rb") as f:
+                            p = BdfFontFile.BdfFontFile(f)
+
+                        # Create PIL font from the parsed BDF
+                        if hasattr(p, "bdf_info"):
+                            logging.info(
+                                f"Successfully loaded tom-thumb BDF font: {bdf_path}"
+                            )
+
+                            # For BDF fonts, we'll use the custom pixel renderer
+                            self.font_small = ImageFont.load(bdf_path)
+                            self.font_large = self.font_small  # Same font for both
+                            self.using_bdf_font = True
+                            font_loaded = True
+                            break
                 except Exception as e:
-                    logging.warning(f"Could not load font {font_path}: {e}")
+                    logging.warning(f"Could not load BDF font {bdf_path}: {e}")
                     continue
 
-            # If no fonts were loaded, create a simple pixel font as last resort
+            # If BDF font failed, try regular TTF fonts
+            if not font_loaded:
+                # Font paths for Raspberry Pi OS
+                ttf_font_paths = [
+                    # Common Raspberry Pi OS font paths
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Common on Pi
+                    "/usr/share/fonts/truetype/piboto/PibotoLt-Regular.ttf",  # Pi-specific font
+                    "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSansMono.ttf",  # Alternative path
+                    # Fallback system fonts
+                    "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                    # Final fallback - use default font
+                    "DejaVuSansMono.ttf",
+                ]
+
+                for font_path in ttf_font_paths:
+                    try:
+                        # Try different font sizes for better LED matrix rendering
+                        if font_path == "DejaVuSansMono.ttf":  # Default font
+                            self.font_small = ImageFont.truetype(font_path, 5)
+                            self.font_large = ImageFont.truetype(font_path, 7)
+                        else:  # Specific path
+                            self.font_small = ImageFont.truetype(font_path, 5)
+                            self.font_large = ImageFont.truetype(font_path, 7)
+
+                        logging.info(f"Successfully loaded TTF font: {font_path}")
+                        self.using_bdf_font = False
+                        font_loaded = True
+                        break
+                    except Exception as e:
+                        logging.warning(f"Could not load font {font_path}: {e}")
+                        continue
+
+            # If no fonts were loaded, use default font as last resort
             if not font_loaded:
                 logging.warning("No system fonts found, using fallback pixel font")
-                # Create a simple pixel font object
-                from PIL import ImageFont
-
                 self.font_small = ImageFont.load_default()
                 self.font_large = ImageFont.load_default()
+                self.using_bdf_font = False
         except Exception as e:
             logging.error(f"Error loading all fonts: {e}")
             # Continue anyway with default font
             self.font_small = ImageFont.load_default()
             self.font_large = ImageFont.load_default()
+            self.using_bdf_font = False
             logging.warning("Using PIL default font as fallback")
 
         # Colors with adjusted brightness for better contrast
@@ -124,8 +164,31 @@ class MetroDisplay:
         # For perfect pixel alignment, ensure x and y are integers
         x, y = int(x), int(y)
 
-        # Special case for bitmap fonts
-        if hasattr(font, "getmask"):
+        # Special handling for tom-thumb BDF font
+        if hasattr(self, "using_bdf_font") and self.using_bdf_font:
+            # Draw text in a direct, pixel-by-pixel manner for BDF font
+            cursor_x = x
+            for char in text:
+                try:
+                    # Get the bitmap of this character
+                    char_bitmap = font.getmask(char)
+                    width, height = char_bitmap.size
+
+                    # Draw each pixel
+                    for py in range(height):
+                        for px in range(width):
+                            # Check if this pixel is set in the bitmap
+                            pixel_value = char_bitmap.getpixel((px, py))
+                            if pixel_value > 0:  # Non-zero pixel value
+                                # Draw a single pixel on the image
+                                self.draw.point((cursor_x + px, y + py), fill=color)
+
+                    # Move cursor to next character position
+                    cursor_x += width + 1  # +1 for spacing
+                except Exception as e:
+                    logging.warning(f"Error rendering character '{char}': {e}")
+                    cursor_x += 4  # Skip ahead in case of error
+        elif hasattr(font, "getmask"):
             # TrueType font
             self.draw.text(
                 (x, y),
@@ -137,8 +200,7 @@ class MetroDisplay:
                 spacing=0,
             )
         else:
-            # Bitmap font - need to handle differently
-            # Draw character by character for better control
+            # Fallback font rendering for other font types
             cursor_x = x
             for char in text:
                 bitmap = font.getmask(char)
