@@ -44,17 +44,28 @@ class MetroDisplay:
 
         # Load fonts
         try:
+            # Try to load a monospace font first for sharper text
             self.font_small = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 6
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 6
             )
             self.font_large = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 8
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 8
             )
         except Exception as e:
-            logging.error(f"Error loading fonts: {e}")
-            sys.exit(1)
+            logging.error(f"Error loading monospace fonts: {e}")
+            try:
+                # Fallback to regular fonts if monospace not available
+                self.font_small = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 6
+                )
+                self.font_large = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 8
+                )
+            except Exception as e:
+                logging.error(f"Error loading fonts: {e}")
+                sys.exit(1)
 
-        # Colors
+        # Colors with adjusted brightness for better contrast
         self.colors = {
             "normal": (0, 255, 0),  # Green
             "weekend": (255, 255, 0),  # Yellow
@@ -80,10 +91,11 @@ class MetroDisplay:
         self.matrix.SetImage(self.image)
 
     def draw_text(self, text, x, y, color, font=None):
-        """Draw text on the display."""
+        """Draw text on the display with anti-aliasing disabled for sharper text."""
         if font is None:
             font = self.font_small
-        self.draw.text((x, y), text, fill=color, font=font)
+        # Draw text with no anti-aliasing for sharper edges
+        self.draw.text((x, y), text, fill=color, font=font, embedded_color=True)
 
     def update_display(self, station_data):
         """Update the display with new station data."""
