@@ -4,6 +4,7 @@ import sys
 import signal
 import logging
 import time
+import os
 from datetime import datetime
 
 # Configure logging
@@ -12,6 +13,48 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.FileHandler("metro_display.log"), logging.StreamHandler()],
 )
+
+# Lock file path
+LOCK_FILE = "/tmp/metro_runner.lock"
+
+
+def check_lock():
+    """Check if another instance is running."""
+    if os.path.exists(LOCK_FILE):
+        try:
+            with open(LOCK_FILE, "r") as f:
+                pid = int(f.read().strip())
+            # Check if process is still running
+            os.kill(pid, 0)
+            logging.error(f"Another instance is already running with PID {pid}")
+            return False
+        except (OSError, ValueError):
+            # Process not running or invalid PID
+            try:
+                os.remove(LOCK_FILE)
+            except OSError:
+                pass
+    return True
+
+
+def create_lock():
+    """Create lock file with current PID."""
+    try:
+        with open(LOCK_FILE, "w") as f:
+            f.write(str(os.getpid()))
+        return True
+    except OSError as e:
+        logging.error(f"Failed to create lock file: {e}")
+        return False
+
+
+def remove_lock():
+    """Remove lock file."""
+    try:
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
+    except OSError as e:
+        logging.error(f"Failed to remove lock file: {e}")
 
 
 class MetroDisplayRunner:
@@ -29,6 +72,7 @@ class MetroDisplayRunner:
         logging.info("Shutting down metro display...")
         self.running = False
         self.cleanup()
+        remove_lock()
 
     def cleanup(self):
         """Clean up processes."""
@@ -102,13 +146,25 @@ class MetroDisplayRunner:
             logging.error(f"Unexpected error: {e}")
         finally:
             self.cleanup()
+            remove_lock()
             logging.info("Metro display system stopped")
 
 
 def main():
     """Main function to run the metro display system."""
-    runner = MetroDisplayRunner()
-    runner.run()
+    # Check if another instance is running
+    if not check_lock():
+        sys.exit(1)
+
+    # Create lock file
+    if not create_lock():
+        sys.exit(1)
+
+    try:
+        runner = MetroDisplayRunner()
+        runner.run()
+    finally:
+        remove_lock()
 
 
 if __name__ == "__main__":

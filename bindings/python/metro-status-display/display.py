@@ -25,6 +25,8 @@ class MetroDisplay:
         self.options.gpio_slowdown = 4
         self.options.drop_privileges = True
         self.options.brightness = 50
+        self.options.limit_refresh = 1
+        self.options.no_busy_waiting = True
 
         # Initialize the matrix with error handling
         try:
@@ -229,29 +231,7 @@ class MetroDisplay:
 
 def main():
     """Main function to run the display."""
-    # Check for existing instance
-    pid_file = "/tmp/metro_display.pid"
-
     try:
-        # Try to create a PID file
-        if os.path.exists(pid_file):
-            with open(pid_file, "r") as f:
-                old_pid = int(f.read().strip())
-                # Check if process with old PID still exists
-                try:
-                    os.kill(old_pid, 0)
-                    logging.error(
-                        f"Another instance is already running with PID {old_pid}"
-                    )
-                    sys.exit(1)
-                except OSError:
-                    # Process not running, we can proceed
-                    pass
-
-        # Write our PID
-        with open(pid_file, "w") as f:
-            f.write(str(os.getpid()))
-
         display = MetroDisplay()
         logging.info("Display initialized")
 
@@ -280,11 +260,6 @@ def main():
         finally:
             display.clear()
             display.matrix.Clear()
-            # Clean up PID file
-            try:
-                os.remove(pid_file)
-            except:
-                pass
 
     except Exception as e:
         logging.error(f"Failed to start display: {e}")
