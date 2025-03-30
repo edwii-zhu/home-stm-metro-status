@@ -258,20 +258,23 @@ def display_station_status():
             print("No current alerts")
 
 
-if __name__ == "__main__":
-    import sys
+def main():
+    """Main function to continuously output station data."""
     import json
+    import time
 
-    # Get the station data
-    station_data = get_station_data()
+    while True:
+        try:
+            station_data = get_station_data()
+            if station_data:
+                print(json.dumps(station_data), flush=True)
+            else:
+                logging.error("Failed to get station data")
+            time.sleep(30)  # Update every 30 seconds
+        except Exception as e:
+            logging.error(f"Error in main loop: {e}")
+            time.sleep(5)  # Wait a bit before retrying
 
-    if station_data is None:
-        print("Failed to retrieve station status.")
-        sys.exit(1)
 
-    # If --json flag is provided, output JSON data
-    if len(sys.argv) > 1 and sys.argv[1] == "--json":
-        print(json.dumps(station_data, indent=2))
-    else:
-        # Otherwise display human-readable format
-        display_station_status()
+if __name__ == "__main__":
+    main()

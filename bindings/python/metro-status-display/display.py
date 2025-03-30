@@ -22,11 +22,11 @@ class MetroDisplay:
         self.options.chain_length = 1
         self.options.parallel = 1
         self.options.hardware_mapping = (
-            "regular"  # Changed from adafruit-hat to regular
+            "regular"  # Using the same working configuration
         )
         self.options.gpio_slowdown = 4
-        self.options.drop_privileges = True  # Changed to True for better compatibility
-        self.options.brightness = 50  # Adjust brightness (0-100)
+        self.options.drop_privileges = True  # Using the same working configuration
+        self.options.brightness = 50
 
         # Initialize the matrix with error handling
         try:
