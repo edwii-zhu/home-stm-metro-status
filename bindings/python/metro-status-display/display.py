@@ -25,8 +25,13 @@ class MetroDisplay:
         self.options.gpio_slowdown = 4
         self.options.drop_privileges = True
         self.options.brightness = 50
-        self.options.limit_refresh = 1
-        self.options.no_busy_waiting = True
+
+        # Lower refresh rate and adjust timing
+        self.options.pwm_bits = 8  # Lower PWM bits (default is 11)
+        self.options.pwm_lsb_nanoseconds = 130  # Increase LSB timing
+        self.options.limit_refresh_rate_hz = 10  # Limit refresh rate to 100Hz
+        self.options.scan_mode = 1  # Progressive scan mode
+        self.options.show_refresh_rate = 1  # Show refresh rate for debugging
 
         # Initialize the matrix with error handling
         try:
