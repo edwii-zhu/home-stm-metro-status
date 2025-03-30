@@ -42,28 +42,41 @@ class MetroDisplay:
         self.image = Image.new("RGB", (64, 32))
         self.draw = ImageDraw.Draw(self.image)
 
-        # Load fonts
+        # Load fonts - try bitmap fonts specifically optimized for LED matrices
         try:
-            # Try to load a pixel-perfect font first
-            self.font_small = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 5
-            )
-            self.font_large = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 7
-            )
+            # First try bitmap fonts that are better for LED matrices
+            font_paths = [
+                "/usr/share/fonts/X11/misc/6x10.pcf.gz",  # Common bitmap font
+                "/usr/share/fonts/X11/misc/5x7.pcf.gz",  # Small bitmap font
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Fallback
+            ]
+
+            # Try each font until one works
+            for font_path in font_paths:
+                try:
+                    if font_path.endswith(".pcf.gz"):
+                        # For bitmap fonts, size doesn't matter as much
+                        self.font_small = ImageFont.load(font_path)
+                        self.font_large = self.font_small
+                        logging.info(f"Using bitmap font: {font_path}")
+                        break
+                    elif font_path.endswith(".ttf"):
+                        # For TrueType fonts, use precise sizes
+                        self.font_small = ImageFont.truetype(font_path, 5)
+                        self.font_large = ImageFont.truetype(font_path, 7)
+                        logging.info(f"Using TrueType font: {font_path}")
+                        break
+                except Exception as e:
+                    logging.warning(f"Could not load font {font_path}: {e}")
+                    continue
+            else:
+                # If no fonts worked, try system defaults
+                self.font_small = ImageFont.truetype("DejaVuSansMono.ttf", 5)
+                self.font_large = ImageFont.truetype("DejaVuSansMono.ttf", 7)
+                logging.warning("Using system default fonts")
         except Exception as e:
-            logging.error(f"Error loading monospace fonts: {e}")
-            try:
-                # Fallback to regular fonts if monospace not available
-                self.font_small = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 5
-                )
-                self.font_large = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 7
-                )
-            except Exception as e:
-                logging.error(f"Error loading fonts: {e}")
-                sys.exit(1)
+            logging.error(f"Error loading all fonts: {e}")
+            sys.exit(1)
 
         # Colors with adjusted brightness for better contrast
         self.colors = {
@@ -91,19 +104,37 @@ class MetroDisplay:
         self.matrix.SetImage(self.image)
 
     def draw_text(self, text, x, y, color, font=None):
-        """Draw text on the display with optimized settings for sharpness."""
+        """Draw text on the display with pixel-perfect rendering for LED matrix."""
         if font is None:
             font = self.font_small
-        # Draw text with optimized settings for LED display
-        self.draw.text(
-            (x, y),
-            text,
-            fill=color,
-            font=font,
-            embedded_color=True,
-            anchor="lt",
-            spacing=0,  # Remove spacing between characters for better pixel alignment
-        )
+
+        # For perfect pixel alignment, ensure x and y are integers
+        x, y = int(x), int(y)
+
+        # Special case for bitmap fonts
+        if hasattr(font, "getmask"):
+            # TrueType font
+            self.draw.text(
+                (x, y),
+                text,
+                fill=color,
+                font=font,
+                embedded_color=True,
+                anchor="lt",
+                spacing=0,
+            )
+        else:
+            # Bitmap font - need to handle differently
+            # Draw character by character for better control
+            cursor_x = x
+            for char in text:
+                bitmap = font.getmask(char)
+                w, h = bitmap.size
+                for dy in range(h):
+                    for dx in range(w):
+                        if bitmap.getpixel((dx, dy)) > 0:
+                            self.draw.point((cursor_x + dx, y + dy), fill=color)
+                cursor_x += w
 
     def update_display(self, station_data):
         """Update the display with new station data."""
@@ -111,11 +142,11 @@ class MetroDisplay:
             # Clear the display
             self.clear()
 
-            # Draw station name (top row)
+            # Draw station name (top row) - ensure pixel alignment
             self.draw_text(
                 station_data["station_name"],
-                1,  # Align to pixel grid
-                1,  # Align to pixel grid
+                0,  # Start at left edge for maximum space
+                0,  # Start at top edge for better alignment
                 self.colors["white"],
                 self.font_large,
             )
@@ -128,14 +159,14 @@ class MetroDisplay:
             )
             self.draw_text(
                 station_data["current_time_period"].upper(),
-                1,  # Align to pixel grid
-                9,  # Align to pixel grid
+                0,  # Start at left edge
+                8,  # Pixel-aligned position
                 period_color,
                 self.font_small,
             )
 
-            # Draw line statuses (bottom row)
-            y_pos = 18  # Align to pixel grid
+            # Draw line statuses (remaining rows)
+            y_pos = 16  # Start position for lines
             for line_number, line_data in station_data["lines"].items():
                 # Determine color based on status
                 status_color = (
@@ -145,15 +176,13 @@ class MetroDisplay:
                 )
 
                 # Create line status text with fixed-width formatting
-                line_text = (
-                    f"{line_data['name'][0]:<1}:{line_data['current_frequency']:<8}"
-                )
+                line_text = f"{line_data['name'][0]}:{line_data['current_frequency']}"
                 if line_data["status"] == "alert":
                     line_text += "!"
 
                 # Draw the line status
-                self.draw_text(line_text, 1, y_pos, status_color, self.font_small)
-                y_pos += 6  # Keep consistent spacing between lines
+                self.draw_text(line_text, 0, y_pos, status_color, self.font_small)
+                y_pos += 8  # Increase spacing for better readability
 
             # Update the display
             self.matrix.SetImage(self.image)
