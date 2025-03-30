@@ -53,6 +53,8 @@ class MetroDisplay:
             "alert": (255, 0, 0),  # Red
             "white": (255, 255, 255),
             "off": (0, 0, 0),
+            "green_line": (0, 200, 0),  # Green line color
+            "orange_line": (255, 165, 0),  # Orange line color
         }
 
         # Set up signal handlers
@@ -286,6 +288,18 @@ class MetroDisplay:
             except:
                 pass  # If even the basic text drawing fails, just continue
 
+    def draw_circle(self, x, y, radius, color):
+        """Draw a filled circle at the specified coordinates."""
+        x, y = int(x), int(y)
+        radius = int(radius)
+
+        # Draw a filled circle using PIL's ellipse drawing
+        self.draw.ellipse(
+            [(x - radius, y - radius), (x + radius, y + radius)],
+            fill=color,
+            outline=color,
+        )
+
     def update_display(self, station_data):
         """Update the display with new station data."""
         try:
@@ -321,20 +335,36 @@ class MetroDisplay:
             # Draw line statuses (remaining rows)
             y_pos = lines_start_y
             for line_number, line_data in station_data["lines"].items():
-                # Determine color based on status
-                status_color = (
-                    self.colors["alert"]
-                    if line_data["status"] == "alert"
-                    else self.colors["normal"]
-                )
+                # Determine alert status for visual indicator
+                has_alert = line_data["status"] == "alert"
+
+                # Determine line color based on line name
+                circle_color = self.colors["white"]  # Default color
+                if line_data["name"].lower() == "green":
+                    circle_color = self.colors["green_line"]
+                elif line_data["name"].lower() == "orange":
+                    circle_color = self.colors["orange_line"]
+
+                # Draw colored circle for the line
+                circle_radius = 2
+                circle_x = 3
+                circle_y = y_pos + 3
+                self.draw_circle(circle_x, circle_y, circle_radius, circle_color)
 
                 # Create line status text with fixed-width formatting
-                line_text = f"{line_data['name'][0]}:{line_data['current_frequency']}"
-                if line_data["status"] == "alert":
+                line_text = f"  {line_data['name'][0]}:{line_data['current_frequency']}"
+                if has_alert:
                     line_text += "!"
 
-                # Draw the line status
-                self.draw_text(line_text, 1, y_pos, status_color, self.font_small)
+                # Draw the line status in white (regardless of status)
+                text_color = self.colors["white"]
+                if has_alert:
+                    # For alerts, flash by alternating between red and white
+                    current_time = int(time.time())
+                    if current_time % 2 == 0:
+                        text_color = self.colors["alert"]
+
+                self.draw_text(line_text, 1, y_pos, text_color, self.font_small)
                 y_pos += line_spacing  # Adjusted spacing for better readability
 
             # Update the display
