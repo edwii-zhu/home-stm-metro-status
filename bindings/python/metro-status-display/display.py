@@ -44,22 +44,22 @@ class MetroDisplay:
 
         # Load fonts
         try:
-            # Try to load a monospace font first for sharper text
+            # Try to load a pixel-perfect font first
             self.font_small = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 6
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 6
             )
             self.font_large = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 8
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 8
             )
         except Exception as e:
             logging.error(f"Error loading monospace fonts: {e}")
             try:
                 # Fallback to regular fonts if monospace not available
                 self.font_small = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 6
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 6
                 )
                 self.font_large = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 8
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 8
                 )
             except Exception as e:
                 logging.error(f"Error loading fonts: {e}")
@@ -91,11 +91,13 @@ class MetroDisplay:
         self.matrix.SetImage(self.image)
 
     def draw_text(self, text, x, y, color, font=None):
-        """Draw text on the display with anti-aliasing disabled for sharper text."""
+        """Draw text on the display with optimized settings for sharpness."""
         if font is None:
             font = self.font_small
-        # Draw text with no anti-aliasing for sharper edges
-        self.draw.text((x, y), text, fill=color, font=font, embedded_color=True)
+        # Draw text with optimized settings for LED display
+        self.draw.text(
+            (x, y), text, fill=color, font=font, embedded_color=True, anchor="lt"
+        )
 
     def update_display(self, station_data):
         """Update the display with new station data."""
@@ -136,8 +138,10 @@ class MetroDisplay:
                     else self.colors["normal"]
                 )
 
-                # Create line status text
-                line_text = f"{line_data['name'][0]}:{line_data['current_frequency']}"
+                # Create line status text with fixed-width formatting
+                line_text = (
+                    f"{line_data['name'][0]:<1}:{line_data['current_frequency']:<8}"
+                )
                 if line_data["status"] == "alert":
                     line_text += "!"
 
