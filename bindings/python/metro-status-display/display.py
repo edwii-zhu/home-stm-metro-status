@@ -166,16 +166,12 @@ class MetroDisplay:
     def update_display(self, station_data):
         """Update the display with new station data."""
         try:
-            # Create a double buffer to prevent flicker
+            # Create a new buffer image
             new_image = Image.new("RGB", (64, 32))
             new_draw = ImageDraw.Draw(new_image)
 
-            # Save current drawing surface
-            original_draw, original_image = self.draw, self.image
-            self.draw, self.image = new_draw, new_image
-
-            # Clear the buffer
-            self.clear()
+            # Fill the new buffer with black
+            new_draw.rectangle([(0, 0), (63, 31)], fill=self.colors["off"])
 
             # Draw time period (first row)
             period_color = (
@@ -183,6 +179,12 @@ class MetroDisplay:
                 if station_data["current_time_period"] == "weekend"
                 else self.colors["white"]
             )
+
+            # Save current drawing surface temporarily
+            temp_draw, temp_image = self.draw, self.image
+            self.draw, self.image = new_draw, new_image
+
+            # Draw all elements to the new buffer
             self.draw_5x7_text(
                 2, 2, station_data["current_time_period"].upper(), period_color
             )
@@ -212,9 +214,11 @@ class MetroDisplay:
 
                 y_pos += line_spacing
 
-            # Restore original drawing surfaces and update display
-            self.draw, self.image = original_draw, original_image
-            self.image.paste(new_image)
+            # Restore original drawing surfaces
+            self.draw, self.image = temp_draw, temp_image
+
+            # Atomically update the display with the new frame
+            self.image = new_image
             self.matrix.SetImage(self.image)
 
         except Exception as e:
