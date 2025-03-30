@@ -6,8 +6,8 @@ set -e
 # Create log files with appropriate permissions
 sudo touch /var/log/metro-status.log
 sudo touch /var/log/metro-status.error.log
-sudo chown pi:pi /var/log/metro-status.log
-sudo chown pi:pi /var/log/metro-status.error.log
+sudo chown edward:edward /var/log/metro-status.log
+sudo chown edward:edward /var/log/metro-status.error.log
 
 # Copy service file to systemd directory
 sudo cp metro-status.service /etc/systemd/system/
