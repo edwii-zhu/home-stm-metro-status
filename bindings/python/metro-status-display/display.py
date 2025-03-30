@@ -345,14 +345,14 @@ class MetroDisplay:
                 elif line_data["name"].lower() == "orange":
                     circle_color = self.colors["orange_line"]
 
-                # Draw colored circle for the line
-                circle_radius = 2
-                circle_x = 3
+                # Draw colored circle for the line with larger radius for better visibility
+                circle_radius = 3
+                circle_x = 4
                 circle_y = y_pos + 3
                 self.draw_circle(circle_x, circle_y, circle_radius, circle_color)
 
-                # Create line status text with fixed-width formatting
-                line_text = f"  {line_data['name'][0]}:{line_data['current_frequency']}"
+                # Create line status text without the first letter of line name
+                line_text = f"  {line_data['current_frequency']}"
                 if has_alert:
                     line_text += "!"
 
