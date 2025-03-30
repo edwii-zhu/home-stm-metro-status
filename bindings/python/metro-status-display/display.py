@@ -246,7 +246,7 @@ class MetroDisplay:
         self.draw.rectangle([(0, 0), (63, 31)], fill=self.colors["off"])
         self.matrix.SetImage(self.image)
 
-    def draw_text(self, text, x, y, color, font=None):
+    def draw_text(self, text, x, y, color, font=None, background=(0, 0, 0)):
         """Draw text on the display with pixel-perfect rendering for LED matrix."""
         if font is None:
             font = self.font_small
@@ -260,17 +260,29 @@ class MetroDisplay:
             tmp_img = Image.new("RGBA", self.image.size, (0, 0, 0, 0))
             tmp_draw = ImageDraw.Draw(tmp_img)
 
+            # Draw background rectangle for text to improve readability
+            text_bbox = tmp_draw.textbbox((x, y), text, font=font)
+            # Add padding around text
+            padding = 1
+            tmp_draw.rectangle(
+                [
+                    (text_bbox[0] - padding, text_bbox[1] - padding),
+                    (text_bbox[2] + padding, text_bbox[3] + padding),
+                ],
+                fill=background,
+            )
+
             # Draw text with no antialiasing for sharp LED display
+            # Add letter_spacing to improve readability
             tmp_draw.text(
                 (x, y),
                 text,
                 fill=color,
                 font=font,
-                spacing=0,  # Tight spacing for LED matrix
+                spacing=1,  # Increased spacing between characters
             )
 
             # Convert the temporary image to RGB and threshold for sharper edges
-            # This step helps create pixel-perfect text by removing antialiasing
             tmp_img = tmp_img.convert("RGB")
 
             # Apply the text image to our main buffer
@@ -303,22 +315,31 @@ class MetroDisplay:
     def update_display(self, station_data):
         """Update the display with new station data."""
         try:
-            # Clear the display
-            self.clear()
+            # Create a double buffer to prevent flicker
+            new_image = Image.new("RGB", (64, 32))
+            new_draw = ImageDraw.Draw(new_image)
+
+            # Save current drawing surface
+            original_draw = self.draw
+            original_image = self.image
+
+            # Temporarily set to new buffer
+            self.draw = new_draw
+            self.image = new_image
 
             # Adjust spacing based on whether we're using a pixel font (Terminus)
             if hasattr(self, "using_pixel_font") and self.using_pixel_font:
                 # Terminus font is larger and clearer on LED matrices
-                period_y = 2
-                lines_start_y = 12
-                line_spacing = 8
+                period_y = 1
+                lines_start_y = 10
+                line_spacing = 10
             else:
                 # Smaller TrueType fonts need different spacing
-                period_y = 2
-                lines_start_y = 10
-                line_spacing = 7
+                period_y = 1
+                lines_start_y = 8
+                line_spacing = 9
 
-            # Draw time period (first row) with appropriate font size
+            # Draw time period (first row) with appropriate font size - add contrast background
             period_color = (
                 self.colors["weekend"]
                 if station_data["current_time_period"] == "weekend"
@@ -326,7 +347,7 @@ class MetroDisplay:
             )
             self.draw_text(
                 station_data["current_time_period"].upper(),
-                1,  # Start slightly offset for cleaner display
+                2,  # More offset for cleaner display
                 period_y,
                 period_color,
                 self.font_small,
@@ -344,30 +365,46 @@ class MetroDisplay:
 
                 if first_letter == "G":
                     circle_color = self.colors["green_line"]
+                    line_label = "GRN"
                 elif first_letter == "O":
                     circle_color = self.colors["orange_line"]
+                    line_label = "ORG"
+                else:
+                    line_label = first_letter
 
                 # Draw colored circle for the line with larger radius for better visibility
                 circle_radius = 3
-                circle_x = 4
-                circle_y = y_pos + 3
+                circle_x = 6
+                circle_y = y_pos + 4
                 self.draw_circle(circle_x, circle_y, circle_radius, circle_color)
 
-                # Create line status text without the first letter of line name
-                line_text = f"  {line_data['current_frequency']}"
+                # Format the frequency text more clearly
+                freq = line_data["current_frequency"]
                 if has_alert:
-                    line_text += "!"
+                    alert_indicator = "!"
+                else:
+                    alert_indicator = ""
+
+                # Create line status text with better formatting
+                line_text = f" {line_label}: {freq}{alert_indicator}"
 
                 # Draw the line status in white (regardless of status)
                 text_color = self.colors["white"]
                 if has_alert:
-                    # For alerts, flash by alternating between red and white
-                    current_time = int(time.time())
-                    if current_time % 2 == 0:
-                        text_color = self.colors["alert"]
+                    # For alerts, use red for the whole text
+                    text_color = self.colors["alert"]
 
-                self.draw_text(line_text, 1, y_pos, text_color, self.font_small)
+                # Draw text with background for improved contrast
+                self.draw_text(line_text, 4, y_pos, text_color, self.font_small)
+
                 y_pos += line_spacing  # Adjusted spacing for better readability
+
+            # Restore original drawing surfaces
+            self.draw = original_draw
+            self.image = original_image
+
+            # Copy the new image to the display buffer all at once (prevents flicker)
+            self.image.paste(new_image)
 
             # Update the display
             self.matrix.SetImage(self.image)
