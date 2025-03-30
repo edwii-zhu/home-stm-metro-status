@@ -3,7 +3,7 @@ import logging
 from requests.exceptions import RequestException, HTTPError
 from dotenv import load_dotenv
 import os
-from datetime import datetime
+from datetime import datetime, time
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +63,48 @@ TIME_PERIODS = {
     "off_peak": "9:30 AM - 3:30 PM",
     "late_evening": "9:00 PM - Close",
 }
+
+
+def is_metro_operating():
+    """Check if the metro is currently operating based on the time."""
+    current_time = datetime.now().time()
+    current_weekday = datetime.now().weekday() < 5  # True for Monday-Friday
+
+    # Parse operating hours
+    weekday_start = time(5, 30)  # 5:30 AM
+    weekday_end = time(1, 00)  # 12:30 AM (next day)
+    weekend_start = time(5, 30)  # 5:30 AM
+    weekend_end = time(1, 30)  # 1:00 AM (next day)
+
+    # Log current time for debugging
+    day_type = "weekday" if current_weekday else "weekend"
+    logging.debug(f"Current time: {current_time}, Day type: {day_type}")
+
+    # Check if current time is within operating hours
+    # For times that span midnight, we need to handle them differently
+    if current_weekday:
+        # For weekdays
+        if weekday_start <= current_time:
+            # After start time and before midnight
+            logging.debug("Metro is operating (weekday, after start time)")
+            return True
+        elif current_time <= weekday_end:
+            # After midnight but before closing time
+            logging.debug("Metro is operating (weekday, before end time)")
+            return True
+    else:
+        # For weekends
+        if weekend_start <= current_time:
+            # After start time and before midnight
+            logging.debug("Metro is operating (weekend, after start time)")
+            return True
+        elif current_time <= weekend_end:
+            # After midnight but before closing time
+            logging.debug("Metro is operating (weekend, before end time)")
+            return True
+
+    logging.debug("Metro is NOT operating (outside of operating hours)")
+    return False
 
 
 def get_current_time_period():
@@ -265,12 +307,26 @@ def main():
 
     while True:
         try:
-            station_data = get_station_data()
-            if station_data:
-                print(json.dumps(station_data), flush=True)
+            # Check if metro is operating
+            if is_metro_operating():
+                station_data = get_station_data()
+                if station_data:
+                    print(json.dumps(station_data), flush=True)
+                else:
+                    logging.error("Failed to get station data")
+                time.sleep(30)  # Update every 30 seconds when metro is operating
             else:
-                logging.error("Failed to get station data")
-            time.sleep(30)  # Update every 30 seconds
+                # Metro is closed, output special closed status
+                closed_data = {
+                    "station_name": BERRI_UQAM["name"],
+                    "operating_hours": BERRI_UQAM["operating_hours"],
+                    "current_time_period": "closed",
+                    "lines": {},
+                    "is_operating": False,
+                }
+                print(json.dumps(closed_data), flush=True)
+                # Sleep longer when metro is closed (5 minutes)
+                time.sleep(300)
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(5)  # Wait a bit before retrying

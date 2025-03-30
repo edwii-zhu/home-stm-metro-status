@@ -257,6 +257,16 @@ class MetroDisplay:
     def update_display(self, station_data):
         """Update the display with new station data."""
         try:
+            # Check if metro is operating
+            if (
+                station_data.get("current_time_period") == "closed"
+                or station_data.get("is_operating") is False
+            ):
+                # Turn off display when metro is closed
+                self.clear()
+                logging.info("Metro is closed, display turned off")
+                return
+
             # Create a new buffer image
             new_image = Image.new("RGB", (64, 32), self.colors["off"])
             new_draw = ImageDraw.Draw(new_image)
@@ -277,30 +287,36 @@ class MetroDisplay:
                 2, 2, station_data["current_time_period"].upper(), period_color
             )
 
-            # Draw line statuses
-            y_pos = 12
-            line_spacing = 10
+            # Draw line statuses if lines data exists and is not empty
+            if station_data.get("lines") and len(station_data["lines"]) > 0:
+                y_pos = 12
+                line_spacing = 10
 
-            for line_number, line_data in station_data["lines"].items():
-                # Determine line color and alert status
-                first_letter = line_data["name"][0].upper()
-                circle_color = (
-                    self.colors["green_line"]
-                    if first_letter == "G"
-                    else self.colors["orange_line"]
-                )
-                has_alert = line_data["status"] == "alert"
+                for line_number, line_data in station_data["lines"].items():
+                    # Determine line color and alert status
+                    first_letter = line_data["name"][0].upper()
+                    circle_color = (
+                        self.colors["green_line"]
+                        if first_letter == "G"
+                        else self.colors["orange_line"]
+                    )
+                    has_alert = line_data["status"] == "alert"
 
-                # Draw line indicator
-                self.draw_circle(6, y_pos + 4, 3, circle_color)
+                    # Draw line indicator
+                    self.draw_circle(6, y_pos + 4, 3, circle_color)
 
-                # Format and draw frequency text
-                freq = line_data["current_frequency"].replace("minutes", "min")
-                freq_text = f" {freq}!" if has_alert else f" {freq}"
-                text_color = self.colors["alert"] if has_alert else self.colors["white"]
-                self.draw_5x7_text(10, y_pos, freq_text, text_color)
+                    # Format and draw frequency text
+                    freq = line_data["current_frequency"].replace("minutes", "min")
+                    freq_text = f" {freq}!" if has_alert else f" {freq}"
+                    text_color = (
+                        self.colors["alert"] if has_alert else self.colors["white"]
+                    )
+                    self.draw_5x7_text(10, y_pos, freq_text, text_color)
 
-                y_pos += line_spacing
+                    y_pos += line_spacing
+            else:
+                # No lines data, draw a message
+                self.draw_5x7_text(5, 15, "NO DATA", self.colors["white"])
 
             # Restore original drawing surfaces
             self.draw, self.image = temp_draw, temp_image
@@ -414,16 +430,31 @@ def main():
                                 if chunk:
                                     try:
                                         station_data = json.loads(chunk)
-                                        # Validate data minimally
-                                        if (
-                                            "current_time_period" in station_data
-                                            and "lines" in station_data
-                                        ):
+                                        # Validate data minimally - only current_time_period is required
+                                        if "current_time_period" in station_data:
                                             # Update display
                                             logging.info(
-                                                "Updating display with new data"
+                                                f"Updating display with data for time period: {station_data['current_time_period']}"
                                             )
-                                            display.update_display(station_data)
+
+                                            # Check if metro is closed
+                                            if (
+                                                station_data.get("current_time_period")
+                                                == "closed"
+                                                or station_data.get("is_operating")
+                                                is False
+                                            ):
+                                                logging.info(
+                                                    "Metro is closed, turning off display"
+                                                )
+                                                display.clear()
+                                                # Sleep longer when metro is closed
+                                                min_update_interval = 300  # Check every 5 minutes when closed
+                                            else:
+                                                # Metro is operating, display info and use normal interval
+                                                min_update_interval = 30  # Normal 30 second updates when operating
+                                                display.update_display(station_data)
+
                                             last_update_time = current_time
                                             last_data = station_data
                                     except json.JSONDecodeError:
