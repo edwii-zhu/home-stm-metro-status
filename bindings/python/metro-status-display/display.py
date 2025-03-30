@@ -5,6 +5,7 @@ from rgbmatrix import RGBMatrix, RGBMatrixOptions
 from PIL import Image, ImageDraw
 import json
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -228,34 +229,66 @@ class MetroDisplay:
 
 def main():
     """Main function to run the display."""
-    display = MetroDisplay()
-    logging.info("Display initialized")
+    # Check for existing instance
+    pid_file = "/tmp/metro_display.pid"
 
     try:
-        while True:
+        # Try to create a PID file
+        if os.path.exists(pid_file):
+            with open(pid_file, "r") as f:
+                old_pid = int(f.read().strip())
+                # Check if process with old PID still exists
+                try:
+                    os.kill(old_pid, 0)
+                    logging.error(
+                        f"Another instance is already running with PID {old_pid}"
+                    )
+                    sys.exit(1)
+                except OSError:
+                    # Process not running, we can proceed
+                    pass
+
+        # Write our PID
+        with open(pid_file, "w") as f:
+            f.write(str(os.getpid()))
+
+        display = MetroDisplay()
+        logging.info("Display initialized")
+
+        try:
+            while True:
+                try:
+                    line = sys.stdin.readline()
+                    if not line:
+                        break
+
+                    station_data = json.loads(line)
+                    display.update_display(station_data)
+                    time.sleep(30)
+
+                except json.JSONDecodeError as e:
+                    logging.error(f"Error parsing JSON: {e}")
+                    display.show_error()
+                    time.sleep(5)
+                except Exception as e:
+                    logging.error(f"Unexpected error: {e}")
+                    display.show_error()
+                    time.sleep(5)
+
+        except KeyboardInterrupt:
+            logging.info("Display stopped by user")
+        finally:
+            display.clear()
+            display.matrix.Clear()
+            # Clean up PID file
             try:
-                line = sys.stdin.readline()
-                if not line:
-                    break
+                os.remove(pid_file)
+            except:
+                pass
 
-                station_data = json.loads(line)
-                display.update_display(station_data)
-                time.sleep(30)
-
-            except json.JSONDecodeError as e:
-                logging.error(f"Error parsing JSON: {e}")
-                display.show_error()
-                time.sleep(5)
-            except Exception as e:
-                logging.error(f"Unexpected error: {e}")
-                display.show_error()
-                time.sleep(5)
-
-    except KeyboardInterrupt:
-        logging.info("Display stopped by user")
-    finally:
-        display.clear()
-        display.matrix.Clear()
+    except Exception as e:
+        logging.error(f"Failed to start display: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
