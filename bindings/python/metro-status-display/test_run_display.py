@@ -129,9 +129,9 @@ class TestTimePeriodsIntegration(unittest.TestCase):
         """Test system behavior at different times of day."""
         time_periods = [
             # Format: (time, weekday, is_operating, expected_period)
-            ("08:00", True, True, "morning_peak"),  # Morning peak (weekday)
+            ("08:00", True, True, "am_peak"),  # AM peak (weekday)
             ("14:00", True, True, "off_peak"),  # Off-peak (weekday)
-            ("17:00", True, True, "afternoon_peak"),  # Afternoon peak (weekday)
+            ("17:00", True, True, "pm_peak"),  # PM peak (weekday)
             ("22:00", True, True, "late_evening"),  # Late evening (weekday)
             ("13:00", False, True, "weekend"),  # Weekend
             ("01:30", True, False, "closed"),  # Closed (weekday)
@@ -230,14 +230,9 @@ class TestLongRunning(unittest.TestCase):
             # Format: (time, duration_minutes, is_operating, expected_period)
             ("02:00", 60, False, "closed"),  # Closed (early morning) - longer period
             ("05:30", 15, True, "off_peak"),  # Early morning start of service
-            ("06:30", 90, True, "morning_peak"),  # Morning peak - extended rush hour
+            ("06:30", 90, True, "am_peak"),  # AM peak - extended rush hour
             ("12:00", 60, True, "off_peak"),  # Off-peak (midday)
-            (
-                "17:00",
-                90,
-                True,
-                "afternoon_peak",
-            ),  # Afternoon peak - extended rush hour
+            ("17:00", 90, True, "pm_peak"),  # PM peak - extended rush hour
             ("21:30", 60, True, "late_evening"),  # Late evening
             ("00:30", 30, True, "late_evening"),  # Late night (still operating)
             ("01:30", 60, False, "closed"),  # Closed (overnight) - longer period
@@ -555,9 +550,7 @@ class TestMetroOperatingHours(unittest.TestCase):
 class SampleDataGenerator:
     """Generate sample data for testing."""
 
-    def generate_data(
-        self, time_period="morning_peak", is_operating=True, add_alert=False
-    ):
+    def generate_data(self, time_period="am_peak", is_operating=True, add_alert=False):
         """Generate sample data for the specified time period."""
         if not is_operating:
             return {
@@ -573,8 +566,8 @@ class SampleDataGenerator:
 
         # Define frequencies based on time period
         frequencies = {
-            "morning_peak": "2-4 minutes",
-            "afternoon_peak": "2-4 minutes",
+            "am_peak": "2-4 minutes",
+            "pm_peak": "2-4 minutes",
             "off_peak": "3-5 minutes",
             "late_evening": "8-10 minutes",
             "weekend": "4-8 minutes",
@@ -595,8 +588,8 @@ class SampleDataGenerator:
                     "route": "Angrignon ↔ Honoré-Beaugrand",
                     "current_frequency": frequencies.get(time_period, "3-5 minutes"),
                     "all_frequencies": {
-                        "morning_peak": "2-4 minutes",
-                        "afternoon_peak": "2-4 minutes",
+                        "am_peak": "2-4 minutes",
+                        "pm_peak": "2-4 minutes",
                         "off_peak": "3-5 minutes",
                         "late_evening": "8-10 minutes",
                         "weekend": "4-8 minutes",
@@ -608,8 +601,8 @@ class SampleDataGenerator:
                     "route": "Côte-Vertu ↔ Montmorency",
                     "current_frequency": frequencies.get(time_period, "3-5 minutes"),
                     "all_frequencies": {
-                        "morning_peak": "2-4 minutes",
-                        "afternoon_peak": "2-4 minutes",
+                        "am_peak": "2-4 minutes",
+                        "pm_peak": "2-4 minutes",
                         "off_peak": "3-5 minutes",
                         "late_evening": "8-10 minutes",
                         "weekend": "4-8 minutes",
@@ -645,9 +638,9 @@ def run_mock_metro(extended=False, duration_minutes=5):
 
     # Define time periods to simulate - base scenario for operating hours
     operating_periods = [
-        "morning_peak",
+        "am_peak",
         "off_peak",
-        "afternoon_peak",
+        "pm_peak",
         "late_evening",
         "weekend",
     ]
@@ -660,15 +653,15 @@ def run_mock_metro(extended=False, duration_minutes=5):
             (4, "closed"),  # 4:00 AM - Closed (before service starts)
             (5, "closed"),  # 5:00 AM - Still closed
             (6, "off_peak"),  # 6:00 AM - Service starts
-            (7, "morning_peak"),  # 7:00 AM - Morning peak
-            (8, "morning_peak"),  # 8:00 AM - Morning peak
-            (9, "morning_peak"),  # 9:00 AM - Morning peak
+            (7, "am_peak"),  # 7:00 AM - AM peak
+            (8, "am_peak"),  # 8:00 AM - AM peak
+            (9, "am_peak"),  # 9:00 AM - AM peak
             (10, "off_peak"),  # 10:00 AM - Off-peak
             (12, "off_peak"),  # 12:00 PM - Off-peak
             (14, "off_peak"),  # 2:00 PM - Off-peak
-            (16, "afternoon_peak"),  # 4:00 PM - Afternoon peak
-            (17, "afternoon_peak"),  # 5:00 PM - Afternoon peak
-            (18, "afternoon_peak"),  # 6:00 PM - Afternoon peak
+            (16, "pm_peak"),  # 4:00 PM - PM peak
+            (17, "pm_peak"),  # 5:00 PM - PM peak
+            (18, "pm_peak"),  # 6:00 PM - PM peak
             (19, "off_peak"),  # 7:00 PM - Off-peak
             (21, "late_evening"),  # 9:00 PM - Late evening
             (23, "late_evening"),  # 11:00 PM - Late evening
@@ -958,9 +951,9 @@ if __name__ == "__main__":
 
             # Define some simple test periods to cycle through
             test_periods = [
-                {"period": "morning_peak", "operating": True},
+                {"period": "am_peak", "operating": True},
                 {"period": "off_peak", "operating": True},
-                {"period": "afternoon_peak", "operating": True},
+                {"period": "pm_peak", "operating": True},
                 {"period": "late_evening", "operating": True},
                 {"period": "closed", "operating": False},  # Test closed state
             ]

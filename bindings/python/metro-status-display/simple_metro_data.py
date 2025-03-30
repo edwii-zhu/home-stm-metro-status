@@ -21,7 +21,7 @@ SAMPLE_DATA = {
             "weekday": "5:30 AM - 12:30 AM",
             "weekend": "5:30 AM - 1:00 AM",
         },
-        "current_time_period": "morning_peak",
+        "current_time_period": "am_peak",
         "is_operating": True,
         "lines": {
             "1": {
@@ -29,8 +29,8 @@ SAMPLE_DATA = {
                 "route": "Angrignon ↔ Honoré-Beaugrand",
                 "current_frequency": "2-4 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
@@ -42,8 +42,8 @@ SAMPLE_DATA = {
                 "route": "Côte-Vertu ↔ Montmorency",
                 "current_frequency": "2-4 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
@@ -58,7 +58,7 @@ SAMPLE_DATA = {
             "weekday": "5:30 AM - 12:30 AM",
             "weekend": "5:30 AM - 1:00 AM",
         },
-        "current_time_period": "afternoon_peak",
+        "current_time_period": "pm_peak",
         "is_operating": True,
         "lines": {
             "1": {
@@ -66,8 +66,8 @@ SAMPLE_DATA = {
                 "route": "Angrignon ↔ Honoré-Beaugrand",
                 "current_frequency": "4-6 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
@@ -83,8 +83,8 @@ SAMPLE_DATA = {
                 "route": "Côte-Vertu ↔ Montmorency",
                 "current_frequency": "2-4 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
@@ -107,8 +107,8 @@ SAMPLE_DATA = {
                 "route": "Angrignon ↔ Honoré-Beaugrand",
                 "current_frequency": "4-8 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
@@ -120,8 +120,8 @@ SAMPLE_DATA = {
                 "route": "Côte-Vertu ↔ Montmorency",
                 "current_frequency": "4-8 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
@@ -144,8 +144,8 @@ SAMPLE_DATA = {
                 "route": "Angrignon ↔ Honoré-Beaugrand",
                 "current_frequency": "8-10 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
@@ -157,8 +157,8 @@ SAMPLE_DATA = {
                 "route": "Côte-Vertu ↔ Montmorency",
                 "current_frequency": "8-10 minutes",
                 "all_frequencies": {
-                    "morning_peak": "2-4 minutes",
-                    "afternoon_peak": "2-4 minutes",
+                    "am_peak": "2-4 minutes",
+                    "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
                     "late_evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
