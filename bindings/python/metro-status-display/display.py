@@ -46,20 +46,20 @@ class MetroDisplay:
         try:
             # Try to load a pixel-perfect font first
             self.font_small = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 6
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 5
             )
             self.font_large = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 8
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 7
             )
         except Exception as e:
             logging.error(f"Error loading monospace fonts: {e}")
             try:
                 # Fallback to regular fonts if monospace not available
                 self.font_small = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 6
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 5
                 )
                 self.font_large = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 8
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 7
                 )
             except Exception as e:
                 logging.error(f"Error loading fonts: {e}")
@@ -96,7 +96,13 @@ class MetroDisplay:
             font = self.font_small
         # Draw text with optimized settings for LED display
         self.draw.text(
-            (x, y), text, fill=color, font=font, embedded_color=True, anchor="lt"
+            (x, y),
+            text,
+            fill=color,
+            font=font,
+            embedded_color=True,
+            anchor="lt",
+            spacing=0,  # Remove spacing between characters for better pixel alignment
         )
 
     def update_display(self, station_data):
@@ -108,8 +114,8 @@ class MetroDisplay:
             # Draw station name (top row)
             self.draw_text(
                 station_data["station_name"],
-                2,
-                1,
+                1,  # Align to pixel grid
+                1,  # Align to pixel grid
                 self.colors["white"],
                 self.font_large,
             )
@@ -122,14 +128,14 @@ class MetroDisplay:
             )
             self.draw_text(
                 station_data["current_time_period"].upper(),
-                2,
-                10,
+                1,  # Align to pixel grid
+                9,  # Align to pixel grid
                 period_color,
                 self.font_small,
             )
 
             # Draw line statuses (bottom row)
-            y_pos = 20
+            y_pos = 18  # Align to pixel grid
             for line_number, line_data in station_data["lines"].items():
                 # Determine color based on status
                 status_color = (
@@ -146,8 +152,8 @@ class MetroDisplay:
                     line_text += "!"
 
                 # Draw the line status
-                self.draw_text(line_text, 2, y_pos, status_color, self.font_small)
-                y_pos += 6
+                self.draw_text(line_text, 1, y_pos, status_color, self.font_small)
+                y_pos += 6  # Keep consistent spacing between lines
 
             # Update the display
             self.matrix.SetImage(self.image)
