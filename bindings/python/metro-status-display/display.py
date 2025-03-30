@@ -365,12 +365,8 @@ class MetroDisplay:
 
                 if first_letter == "G":
                     circle_color = self.colors["green_line"]
-                    line_label = "GRN"
                 elif first_letter == "O":
                     circle_color = self.colors["orange_line"]
-                    line_label = "ORG"
-                else:
-                    line_label = first_letter
 
                 # Draw colored circle for the line with larger radius for better visibility
                 circle_radius = 3
@@ -385,8 +381,8 @@ class MetroDisplay:
                 else:
                     alert_indicator = ""
 
-                # Create line status text with better formatting
-                line_text = f" {line_label}: {freq}{alert_indicator}"
+                # Create line status text with simplified formatting
+                line_text = f"  {freq}{alert_indicator}"
 
                 # Draw the line status in white (regardless of status)
                 text_color = self.colors["white"]
