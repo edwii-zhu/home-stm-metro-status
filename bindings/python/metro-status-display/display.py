@@ -280,27 +280,16 @@ class MetroDisplay:
             # Adjust spacing based on whether we're using a pixel font (Terminus)
             if hasattr(self, "using_pixel_font") and self.using_pixel_font:
                 # Terminus font is larger and clearer on LED matrices
-                title_y = 0
-                period_y = 12
-                lines_start_y = 20
+                period_y = 2  # Move period up since we're not showing station name
+                lines_start_y = 14  # Adjust line status starting position
                 line_spacing = 10
             else:
                 # Smaller TrueType fonts need different spacing
-                title_y = 0
-                period_y = 8
-                lines_start_y = 16
+                period_y = 2  # Move period up since we're not showing station name
+                lines_start_y = 12  # Adjust line status starting position
                 line_spacing = 8
 
-            # Draw station name (top row) - ensure pixel alignment
-            self.draw_text(
-                station_data["station_name"],
-                0,  # Start at left edge for maximum space
-                title_y,
-                self.colors["white"],
-                self.font_large,
-            )
-
-            # Draw time period (second row)
+            # Draw time period (first row now)
             period_color = (
                 self.colors["weekend"]
                 if station_data["current_time_period"] == "weekend"
