@@ -22,20 +22,22 @@ class MetroDisplay:
         self.options.chain_length = 1
         self.options.parallel = 1
         self.options.hardware_mapping = "regular"
-        self.options.gpio_slowdown = 4  # Reduced to stay within valid range
+        self.options.gpio_slowdown = 3  # Try a different slowdown value
         self.options.drop_privileges = True
-        self.options.brightness = 25  # Further reduced for less power draw
+        self.options.brightness = 20  # Further reduced brightness
 
-        # Aggressive optimization for stability
-        self.options.pwm_bits = 6  # Minimal PWM bits for stability
-        self.options.pwm_lsb_nanoseconds = (
-            350  # Increased to compensate for lower gpio_slowdown
+        # Focus on flicker reduction
+        self.options.pwm_bits = 7  # Back to higher value for smoother color transitions
+        self.options.pwm_lsb_nanoseconds = 50  # Lower value for faster response
+        self.options.limit_refresh_rate_hz = (
+            60  # Higher refresh rate can reduce visible flicker
         )
-        self.options.limit_refresh_rate_hz = 25  # Even more conservative refresh rate
-        self.options.scan_mode = 0  # Progressive scan
-        self.options.multiplexing = 0  # No multiplexing
-        self.options.disable_hardware_pulsing = True  # More stable but uses more CPU
-        self.options.show_refresh_rate = 0  # Disable for production
+        self.options.scan_mode = 1  # Try interlaced scan for better visual stability
+        self.options.multiplexing = 0  # Still no multiplexing
+        self.options.disable_hardware_pulsing = (
+            False  # Re-enable hardware pulsing for stability
+        )
+        self.options.show_refresh_rate = 0  # Keep disabled for production
         self.options.inverse_colors = False
 
         # Initialize the matrix with error handling
@@ -303,22 +305,9 @@ class MetroDisplay:
             # Restore original drawing surfaces
             self.draw, self.image = temp_draw, temp_image
 
-            # Check if the frame has changed
-            update_needed = True
-            if self.prev_image:
-                # Compare with previous frame
-                if ImageChops.difference(new_image, self.prev_image).getbbox() is None:
-                    logging.info("No display update needed - frame unchanged")
-                    update_needed = False
-
-            # Only update if needed
-            if update_needed:
-                # Atomically update the display with the new frame
-                self.image = new_image
-                self.matrix.SetImage(self.image)
-                logging.info("Display updated with new frame")
-
-            # Store the current frame for next comparison
+            # Always update the display - we'll manage update frequency at a higher level
+            self.image = new_image
+            self.matrix.SetImage(self.image)
             self.prev_image = new_image
 
         except Exception as e:
@@ -349,43 +338,59 @@ def main():
                     sys.exit(1)
                 time.sleep(2)  # Wait before retry
 
-        # Cache for station data to avoid unnecessary processing
-        last_data_hash = None
+        # Initialize update tracking
+        last_update_time = 0
+        min_update_interval = 30  # Minimum seconds between updates
+        last_data = None
 
         # Main processing loop
         try:
             while True:
                 try:
-                    # Read data without blocking too long
-                    line = ""
-                    if sys.stdin.isatty():
-                        # Interactive mode
-                        line = sys.stdin.readline()
+                    # Calculate time since last update
+                    current_time = time.time()
+                    time_since_last_update = current_time - last_update_time
+
+                    # Check if we should try to read new data
+                    if time_since_last_update >= min_update_interval:
+                        # Read data from stdin
+                        try:
+                            line = sys.stdin.readline().strip()
+                            if line:
+                                # Only process if we got actual data
+                                station_data = json.loads(line)
+                                last_data = station_data
+
+                                # Update display in a controlled manner
+                                display.update_display(station_data)
+                                last_update_time = current_time
+                                logging.info(
+                                    f"Display updated at {time.strftime('%H:%M:%S')}"
+                                )
+
+                                # Sleep after update to let display stabilize
+                                time.sleep(0.5)
+                        except (IOError, KeyboardInterrupt):
+                            # Handle stdin interruptions gracefully
+                            time.sleep(1)
                     else:
-                        # Pipe mode - check if data is available
-                        import select
+                        # Sleep until next potential update
+                        sleep_time = min(
+                            1.0, min_update_interval - time_since_last_update
+                        )
+                        time.sleep(sleep_time)
 
-                        if select.select([sys.stdin], [], [], 0.1)[0]:
-                            line = sys.stdin.readline()
-
-                    if not line:
-                        time.sleep(0.5)  # Sleep briefly if no data
-                        continue
-
-                    # Process data
-                    station_data = json.loads(line)
-
-                    # Check if data has changed
-                    current_hash = hash(json.dumps(station_data, sort_keys=True))
-                    if current_hash != last_data_hash:
-                        display.update_display(station_data)
-                        last_data_hash = current_hash
-                    else:
-                        logging.info("Data unchanged, skipping display update")
-
-                    # Stabilize then sleep until next update
-                    time.sleep(0.2)  # Stabilization delay
-                    time.sleep(29.8)  # Remaining time to 30 seconds
+                        # If we have data but it's been a while, refresh display without changes
+                        # This can help with display stability on some matrices
+                        if (
+                            last_data
+                            and time_since_last_update > 15
+                            and time_since_last_update < min_update_interval - 1
+                        ):
+                            display.matrix.SetImage(
+                                display.image
+                            )  # Refresh current image
+                            time.sleep(0.1)
 
                 except json.JSONDecodeError as e:
                     logging.error(f"Error parsing JSON: {e}")
