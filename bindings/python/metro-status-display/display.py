@@ -341,6 +341,7 @@ class MetroDisplay:
             " ": [0x00, 0x00, 0x00, 0x00, 0x00],  # Space
             # Letters - just the ones we need
             "A": [0x7E, 0x11, 0x11, 0x11, 0x7E],  # A
+            "D": [0x7F, 0x41, 0x41, 0x41, 0x3E],  # D
             "E": [0x7F, 0x49, 0x49, 0x49, 0x41],  # E
             "F": [0x7F, 0x09, 0x09, 0x09, 0x01],  # F
             "G": [0x3E, 0x41, 0x49, 0x49, 0x3A],  # G
@@ -452,10 +453,11 @@ class MetroDisplay:
 
                 # Format the frequency text more clearly
                 freq = line_data["current_frequency"]
+                freq = freq.replace("minutes", "min")
                 if has_alert:
-                    freq_text = f"  {freq}!"
+                    freq_text = f" {freq}!"
                 else:
-                    freq_text = f"  {freq}"
+                    freq_text = f" {freq}"
 
                 # Draw the line status text in white (or red for alerts)
                 text_color = self.colors["white"]
