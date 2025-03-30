@@ -295,16 +295,16 @@ class MetroDisplay:
             # Adjust spacing based on whether we're using a pixel font (Terminus)
             if hasattr(self, "using_pixel_font") and self.using_pixel_font:
                 # Terminus font is larger and clearer on LED matrices
-                period_y = 1
-                lines_start_y = 10
-                line_spacing = 7
+                period_y = 2
+                lines_start_y = 12
+                line_spacing = 8
             else:
                 # Smaller TrueType fonts need different spacing
-                period_y = 1
-                lines_start_y = 8
-                line_spacing = 6
+                period_y = 2
+                lines_start_y = 10
+                line_spacing = 7
 
-            # Draw time period (first row) with smaller font
+            # Draw time period (first row) with appropriate font size
             period_color = (
                 self.colors["weekend"]
                 if station_data["current_time_period"] == "weekend"
@@ -312,13 +312,13 @@ class MetroDisplay:
             )
             self.draw_text(
                 station_data["current_time_period"].upper(),
-                0,  # Start at left edge
+                1,  # Start slightly offset for cleaner display
                 period_y,
                 period_color,
-                self.font_small,  # Using smaller font
+                self.font_small,
             )
 
-            # Draw line statuses (remaining rows) with smaller font
+            # Draw line statuses (remaining rows)
             y_pos = lines_start_y
             for line_number, line_data in station_data["lines"].items():
                 # Determine color based on status
@@ -333,9 +333,9 @@ class MetroDisplay:
                 if line_data["status"] == "alert":
                     line_text += "!"
 
-                # Draw the line status with smaller font
-                self.draw_text(line_text, 0, y_pos, status_color, self.font_small)
-                y_pos += line_spacing  # Reduced spacing for smaller font
+                # Draw the line status
+                self.draw_text(line_text, 1, y_pos, status_color, self.font_small)
+                y_pos += line_spacing  # Adjusted spacing for better readability
 
             # Update the display
             self.matrix.SetImage(self.image)
