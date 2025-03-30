@@ -26,11 +26,11 @@ class MetroDisplay:
         self.options.hardware_mapping = "regular"
         self.options.gpio_slowdown = 1  # Minimal slowdown
         self.options.drop_privileges = True
-        self.options.brightness = 60  # Medium brightness
+        self.options.brightness = 20  # Lower brightness
 
         # Very simple, default PWM settings
-        self.options.pwm_bits = 11  # Default value
-        self.options.pwm_lsb_nanoseconds = 130  # Default value
+        self.options.pwm_bits = 8  # Lower value
+        self.options.pwm_lsb_nanoseconds = 200  # Higher value
         self.options.limit_refresh_rate_hz = 0  # Auto/default
         self.options.scan_mode = 0  # Progressive scan (default)
         self.options.multiplexing = 0  # Default
@@ -99,6 +99,7 @@ class MetroDisplay:
             " ": [0x00, 0x00, 0x00, 0x00, 0x00],
             # Letters
             "A": [0x7E, 0x11, 0x11, 0x11, 0x7E],
+            "B": [0x7F, 0x49, 0x49, 0x49, 0x36],
             "D": [0x7F, 0x41, 0x41, 0x41, 0x3E],
             "E": [0x7F, 0x49, 0x49, 0x49, 0x41],
             "F": [0x7F, 0x09, 0x09, 0x09, 0x01],
