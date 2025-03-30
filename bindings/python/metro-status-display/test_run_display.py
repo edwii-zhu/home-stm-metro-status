@@ -11,6 +11,7 @@ from unittest.mock import patch, MagicMock
 from run_display import MetroDisplayRunner
 from datetime import datetime, timedelta
 from freezegun import freeze_time
+from metro import is_metro_operating
 
 # Configure logging
 logging.basicConfig(
@@ -71,10 +72,12 @@ class TestMetroDisplayRunner(unittest.TestCase):
         # Configure mocks
         mock_metro.poll.return_value = None
         mock_display.poll.return_value = None
+
+        # Configure stderr with proper return values
         mock_metro.stderr = MagicMock()
         mock_display.stderr = MagicMock()
-        mock_metro.stderr.readline.return_value = ""
-        mock_display.stderr.readline.return_value = ""
+        mock_metro.stderr.readline.return_value = b""  # Return empty byte string
+        mock_display.stderr.readline.return_value = b""  # Return empty byte string
 
         # Configure Popen to return our mocks
         mock_popen.side_effect = [mock_display, mock_metro]
@@ -174,6 +177,12 @@ class TestTimePeriodsIntegration(unittest.TestCase):
             mock_metro.poll.return_value = None
             mock_display.poll.return_value = None
 
+            # Configure stderr with proper return values for error checking
+            mock_metro.stderr = MagicMock()
+            mock_display.stderr = MagicMock()
+            mock_metro.stderr.readline.return_value = b""  # Return empty byte string
+            mock_display.stderr.readline.return_value = b""  # Return empty byte string
+
             # Set up pipes for communication
             mock_popen.side_effect = [mock_display, mock_metro]
 
@@ -216,17 +225,26 @@ class TestLongRunning(unittest.TestCase):
 
     def test_day_simulation(self):
         """Simulate a full day of operation with different time periods."""
-        # Define time periods to test in sequence
+        # Define time periods to test in sequence - extended test
         time_sequence = [
             # Format: (time, duration_minutes, is_operating, expected_period)
-            ("03:00", 30, False, "closed"),  # Closed (early morning)
-            ("05:40", 30, True, "off_peak"),  # Early morning operation
-            ("07:00", 60, True, "morning_peak"),  # Morning peak
+            ("02:00", 60, False, "closed"),  # Closed (early morning) - longer period
+            ("05:30", 15, True, "off_peak"),  # Early morning start of service
+            ("06:30", 90, True, "morning_peak"),  # Morning peak - extended rush hour
             ("12:00", 60, True, "off_peak"),  # Off-peak (midday)
-            ("17:00", 60, True, "afternoon_peak"),  # Afternoon peak
+            (
+                "17:00",
+                90,
+                True,
+                "afternoon_peak",
+            ),  # Afternoon peak - extended rush hour
             ("21:30", 60, True, "late_evening"),  # Late evening
             ("00:30", 30, True, "late_evening"),  # Late night (still operating)
-            ("01:30", 30, False, "closed"),  # Closed (overnight)
+            ("01:30", 60, False, "closed"),  # Closed (overnight) - longer period
+            # Additional transition test
+            ("03:00", 30, False, "closed"),  # Still closed
+            ("05:25", 5, False, "closed"),  # Just before opening
+            ("05:30", 15, True, "off_peak"),  # Service resumes
         ]
 
         # Run the simulation
@@ -246,6 +264,12 @@ class TestLongRunning(unittest.TestCase):
             mock_display.stdin = MagicMock()
             mock_metro.poll.return_value = None
             mock_display.poll.return_value = None
+
+            # Configure stderr with proper return values for error checking
+            mock_metro.stderr = MagicMock()
+            mock_display.stderr = MagicMock()
+            mock_metro.stderr.readline.return_value = b""  # Return empty byte string
+            mock_display.stderr.readline.return_value = b""  # Return empty byte string
 
             # Set up popen to return our mocks
             mock_popen.side_effect = [mock_display, mock_metro]
@@ -320,6 +344,212 @@ class TestLongRunning(unittest.TestCase):
             runner.running = False
             runner_thread.join(timeout=2)
             runner.cleanup()
+
+
+class TestMetroClosedStatus(unittest.TestCase):
+    """Specific tests for the metro closed status functionality."""
+
+    @patch("metro.is_metro_operating")
+    def test_metro_closed_status(self, mock_is_operating):
+        """Test that the system correctly handles metro closed status."""
+
+        # Setup data generator
+        data_generator = SampleDataGenerator()
+
+        # Configure mock to return False (metro is closed)
+        mock_is_operating.return_value = False
+
+        # Create test data for closed status
+        closed_data = data_generator.generate_data(
+            time_period="closed", is_operating=False
+        )
+
+        # Start the display runner with mocked processes
+        with patch("subprocess.Popen") as mock_popen:
+            # Mock metro and display processes
+            mock_metro = MagicMock()
+            mock_display = MagicMock()
+
+            # Configure process behavior
+            mock_metro.stdout = MagicMock()
+            mock_display.stdin = MagicMock()
+            mock_metro.poll.return_value = None
+            mock_display.poll.return_value = None
+
+            # Configure stderr with proper return values
+            mock_metro.stderr = MagicMock()
+            mock_display.stderr = MagicMock()
+            mock_metro.stderr.readline.return_value = b""
+            mock_display.stderr.readline.return_value = b""
+
+            # Set up Popen to return our mocks
+            mock_popen.side_effect = [mock_display, mock_metro]
+
+            # Start runner in a separate thread
+            runner = MetroDisplayRunner()
+            import threading
+
+            runner_thread = threading.Thread(target=runner.run)
+            runner_thread.daemon = True
+            runner_thread.start()
+
+            # Simulate metro.py sending closed status data
+            closed_output = json.dumps(closed_data)
+            mock_metro.stdout.readline.return_value = closed_output.encode("utf-8")
+
+            # Let it run for a bit
+            time.sleep(5)
+
+            # Verify display process received data with closed status
+            calls = mock_display.stdin.write.call_args_list
+            self.assertTrue(
+                any('"current_time_period": "closed"' in str(call) for call in calls),
+                "Display should receive closed status data",
+            )
+            self.assertTrue(
+                any('"is_operating": false' in str(call).lower() for call in calls),
+                "Display should receive is_operating=false data",
+            )
+
+            # Clean up
+            runner.running = False
+            runner_thread.join(timeout=2)
+            runner.cleanup()
+
+    @patch("metro.is_metro_operating")
+    def test_transition_to_closed(self, mock_is_operating):
+        """Test transition from operating to closed state."""
+        # Setup data generator
+        data_generator = SampleDataGenerator()
+
+        # Start with metro operating
+        mock_is_operating.return_value = True
+
+        # Start the display runner with mocked processes
+        with patch("subprocess.Popen") as mock_popen:
+            # Mock metro and display processes
+            mock_metro = MagicMock()
+            mock_display = MagicMock()
+
+            # Configure process behavior
+            mock_metro.stdout = MagicMock()
+            mock_display.stdin = MagicMock()
+            mock_metro.poll.return_value = None
+            mock_display.poll.return_value = None
+
+            # Configure stderr with proper return values
+            mock_metro.stderr = MagicMock()
+            mock_display.stderr = MagicMock()
+            mock_metro.stderr.readline.return_value = b""
+            mock_display.stderr.readline.return_value = b""
+
+            # Set up Popen to return our mocks
+            mock_popen.side_effect = [mock_display, mock_metro]
+
+            # Start runner in a separate thread
+            runner = MetroDisplayRunner()
+            import threading
+
+            runner_thread = threading.Thread(target=runner.run)
+            runner_thread.daemon = True
+            runner_thread.start()
+
+            # First send data with metro operating
+            operating_data = data_generator.generate_data(
+                time_period="evening_peak", is_operating=True
+            )
+            operating_output = json.dumps(operating_data)
+            mock_metro.stdout.readline.return_value = operating_output.encode("utf-8")
+
+            # Let it run for a bit
+            time.sleep(3)
+
+            # Switch to closed state
+            mock_is_operating.return_value = False
+            closed_data = data_generator.generate_data(
+                time_period="closed", is_operating=False
+            )
+            closed_output = json.dumps(closed_data)
+            mock_metro.stdout.readline.return_value = closed_output.encode("utf-8")
+
+            # Let it run in closed state
+            time.sleep(5)
+
+            # Verify transition happened
+            calls = mock_display.stdin.write.call_args_list
+            self.assertTrue(
+                any('"is_operating": true' in str(call).lower() for call in calls),
+                "Display should have received operating data",
+            )
+            self.assertTrue(
+                any('"is_operating": false' in str(call).lower() for call in calls),
+                "Display should have received closed data after transition",
+            )
+
+            # Clean up
+            runner.running = False
+            runner_thread.join(timeout=2)
+            runner.cleanup()
+
+
+class TestMetroOperatingHours(unittest.TestCase):
+    """Test the is_metro_operating function directly."""
+
+    def test_weekday_operating_hours(self):
+        """Test weekday operating hours."""
+        # Test various times throughout a weekday
+        with freeze_time("2023-08-14 05:29:00"):  # Monday 5:29 AM - just before opening
+            self.assertFalse(is_metro_operating())
+
+        with freeze_time("2023-08-14 05:30:00"):  # Monday 5:30 AM - opening time
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time("2023-08-14 12:00:00"):  # Monday noon
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time("2023-08-14 23:59:59"):  # Monday just before midnight
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time(
+            "2023-08-15 00:30:00"
+        ):  # Tuesday 12:30 AM - still open (after midnight)
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time(
+            "2023-08-15 00:31:00"
+        ):  # Tuesday 12:31 AM - just after closing
+            self.assertFalse(is_metro_operating())
+
+        with freeze_time("2023-08-15 03:00:00"):  # Tuesday 3:00 AM - middle of night
+            self.assertFalse(is_metro_operating())
+
+    def test_weekend_operating_hours(self):
+        """Test weekend operating hours."""
+        # Test various times throughout a weekend day
+        with freeze_time(
+            "2023-08-12 05:29:00"
+        ):  # Saturday 5:29 AM - just before opening
+            self.assertFalse(is_metro_operating())
+
+        with freeze_time("2023-08-12 05:30:00"):  # Saturday 5:30 AM - opening time
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time("2023-08-12 12:00:00"):  # Saturday noon
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time("2023-08-12 23:59:59"):  # Saturday just before midnight
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time(
+            "2023-08-13 01:00:00"
+        ):  # Sunday 1:00 AM - still open (after midnight)
+            self.assertTrue(is_metro_operating())
+
+        with freeze_time("2023-08-13 01:01:00"):  # Sunday 1:01 AM - just after closing
+            self.assertFalse(is_metro_operating())
+
+        with freeze_time("2023-08-13 03:00:00"):  # Sunday 3:00 AM - middle of night
+            self.assertFalse(is_metro_operating())
 
 
 class SampleDataGenerator:
@@ -408,51 +638,145 @@ def run_mock_metro(extended=False, duration_minutes=5):
     """Run a mock metro process that outputs sample data."""
     data_generator = SampleDataGenerator()
 
-    # Define time periods to simulate
+    # Define time periods to simulate - base scenario for operating hours
+    operating_periods = [
+        "morning_peak",
+        "off_peak",
+        "afternoon_peak",
+        "late_evening",
+        "weekend",
+    ]
+
+    # For extended tests, we add a realistic time sequence with closed periods
     if extended:
-        time_periods = [
-            "morning_peak",
-            "off_peak",
-            "afternoon_peak",
-            "late_evening",
-            "weekend",
-            "closed",
+        # Simulate a full 24-hour cycle with proper transitions
+        full_day_sequence = [
+            # Time periods follow a logical day progression
+            (4, "closed"),  # 4:00 AM - Closed (before service starts)
+            (5, "closed"),  # 5:00 AM - Still closed
+            (6, "off_peak"),  # 6:00 AM - Service starts
+            (7, "morning_peak"),  # 7:00 AM - Morning peak
+            (8, "morning_peak"),  # 8:00 AM - Morning peak
+            (9, "morning_peak"),  # 9:00 AM - Morning peak
+            (10, "off_peak"),  # 10:00 AM - Off-peak
+            (12, "off_peak"),  # 12:00 PM - Off-peak
+            (14, "off_peak"),  # 2:00 PM - Off-peak
+            (16, "afternoon_peak"),  # 4:00 PM - Afternoon peak
+            (17, "afternoon_peak"),  # 5:00 PM - Afternoon peak
+            (18, "afternoon_peak"),  # 6:00 PM - Afternoon peak
+            (19, "off_peak"),  # 7:00 PM - Off-peak
+            (21, "late_evening"),  # 9:00 PM - Late evening
+            (23, "late_evening"),  # 11:00 PM - Late evening
+            (0, "late_evening"),  # 12:00 AM - Late evening
+            (1, "closed"),  # 1:00 AM - Closed (after service ends)
+            (2, "closed"),  # 2:00 AM - Closed
+            (3, "closed"),  # 3:00 AM - Closed
         ]
-    else:
-        time_periods = ["morning_peak", "off_peak"]
 
-    end_time = time.time() + (duration_minutes * 60)
-    period_index = 0
+        # Calculate how much simulated time to spend on each period
+        seconds_per_hour = (duration_minutes * 60) / len(full_day_sequence)
+        time_per_period = max(5, int(seconds_per_hour))  # At least 5 seconds per period
 
-    while time.time() < end_time:
-        # Get the current period to simulate
-        current_period = time_periods[period_index]
-        is_operating = current_period != "closed"
-
-        # Generate data
-        sample_data = data_generator.generate_data(
-            time_period=current_period,
-            is_operating=is_operating,
-            add_alert=(period_index % 3 == 0),  # Add alert every 3rd period
+        # Log the simulation plan
+        logging.info(
+            f"Simulating a full day cycle with {len(full_day_sequence)} time periods"
         )
+        logging.info(f"Each period will last ~{time_per_period} seconds of real time")
 
-        # Output data
-        print(json.dumps(sample_data), flush=True)
+        # Run the time sequence simulation
+        start_time = time.time()
+        end_time = start_time + (duration_minutes * 60)
 
-        # Sleep for a bit
-        time.sleep(10)  # Update every 10 seconds
+        period_index = 0
+        period_start_time = start_time
 
-        # Move to next period occasionally
-        if time.time() % 30 < 0.5:  # Switch approximately every 30 seconds
-            period_index = (period_index + 1) % len(time_periods)
-            logging.info(f"Switching to period: {time_periods[period_index]}")
+        while time.time() < end_time:
+            # Get current period information
+            hour, period = full_day_sequence[period_index]
+            is_operating = period != "closed"
+
+            # Generate data for this period
+            sample_data = data_generator.generate_data(
+                time_period=period,
+                is_operating=is_operating,
+                add_alert=(period_index % 7 == 0),  # Add alert occasionally
+            )
+
+            # Output data with the simulated hour
+            current_data = sample_data.copy()
+            current_data["simulated_hour"] = hour
+            current_data["is_operating"] = is_operating
+
+            # Output data
+            print(json.dumps(current_data), flush=True)
+
+            # Sleep for a bit
+            time.sleep(min(5, time_per_period / 3))  # Multiple updates per period
+
+            # Check if it's time to move to the next period
+            current_time = time.time()
+            if current_time - period_start_time >= time_per_period:
+                period_index = (period_index + 1) % len(full_day_sequence)
+                period_start_time = current_time
+                hour, period = full_day_sequence[period_index]
+                logging.info(
+                    f"Simulating {hour}:00 - {period.upper()}, Operating: {period != 'closed'}"
+                )
+
+    else:
+        # Simple operating-only time period rotation
+        end_time = time.time() + (duration_minutes * 60)
+        period_index = 0
+
+        while time.time() < end_time:
+            # Get the current period to simulate (only operating periods)
+            current_period = operating_periods[period_index]
+
+            # Generate data
+            sample_data = data_generator.generate_data(
+                time_period=current_period,
+                is_operating=True,
+                add_alert=(period_index % 3 == 0),  # Add alert every 3rd period
+            )
+
+            # Output data
+            print(json.dumps(sample_data), flush=True)
+
+            # Sleep for a bit
+            time.sleep(10)  # Update every 10 seconds
+
+            # Move to next period occasionally
+            if time.time() % 30 < 0.5:  # Switch approximately every 30 seconds
+                period_index = (period_index + 1) % len(operating_periods)
+                logging.info(f"Switching to period: {operating_periods[period_index]}")
 
 
-def test_manual(extended=False, duration_minutes=10):
-    """Manual test function that can be run directly."""
+def test_manual(extended=False, duration_minutes=30):
+    """Manual test function that can be run directly.
+
+    Run with:
+        python test_run_display.py --manual             # Basic test for 30 minutes
+        python test_run_display.py --manual --extended  # Test all time periods including closed
+        python test_run_display.py --manual --extended --duration 60  # Extended test for 60 minutes
+    """
     logging.info(
         f"Starting manual test (extended={extended}, duration={duration_minutes} min)..."
     )
+    logging.info(
+        "This test simulates the metro status display with various time periods"
+    )
+
+    if extended:
+        logging.info(
+            "EXTENDED MODE: Will cycle through all time periods including CLOSED state"
+        )
+    else:
+        logging.info("BASIC MODE: Will only cycle through operating time periods")
+
+    # Print operating/non-operating hours for reference
+    logging.info("Metro operating hours:")
+    logging.info("  Weekdays: 5:30 AM - 12:30 AM")
+    logging.info("  Weekends: 5:30 AM - 1:00 AM")
 
     # Start the runner
     runner = MetroDisplayRunner()
@@ -486,6 +810,7 @@ def test_manual(extended=False, duration_minutes=10):
         end_time = start_time + (duration_minutes * 60)
 
         logging.info(f"Test running for {duration_minutes} minutes...")
+        logging.info(f"Press Ctrl+C to stop the test at any time")
 
         while time.time() < end_time and runner.running:
             # Check if processes are still running
@@ -501,7 +826,10 @@ def test_manual(extended=False, duration_minutes=10):
             elapsed = time.time() - start_time
             if int(elapsed) % 60 == 0 and int(elapsed) > 0:
                 minutes_elapsed = int(elapsed / 60)
-                logging.info(f"Test running for {minutes_elapsed} minutes...")
+                remaining = duration_minutes - minutes_elapsed
+                logging.info(
+                    f"Test running for {minutes_elapsed} minutes... ({remaining} minutes remaining)"
+                )
 
             time.sleep(1)
 
@@ -530,7 +858,7 @@ if __name__ == "__main__":
     elif "--manual" in sys.argv:
         # Run manual test
         extended = "--extended" in sys.argv
-        duration = 10  # Default duration
+        duration = 30  # Default duration
 
         if "--duration" in sys.argv:
             try:
