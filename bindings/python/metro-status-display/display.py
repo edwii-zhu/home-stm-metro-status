@@ -45,10 +45,10 @@ class MetroDisplay:
         # Load fonts
         try:
             self.font_small = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 8
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 6
             )
             self.font_large = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 10
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 8
             )
         except Exception as e:
             logging.error(f"Error loading fonts: {e}")
@@ -95,7 +95,7 @@ class MetroDisplay:
             self.draw_text(
                 station_data["station_name"],
                 2,
-                2,
+                1,
                 self.colors["white"],
                 self.font_large,
             )
@@ -109,13 +109,13 @@ class MetroDisplay:
             self.draw_text(
                 station_data["current_time_period"].upper(),
                 2,
-                14,
+                10,
                 period_color,
                 self.font_small,
             )
 
             # Draw line statuses (bottom row)
-            y_pos = 24
+            y_pos = 20
             for line_number, line_data in station_data["lines"].items():
                 # Determine color based on status
                 status_color = (
@@ -131,7 +131,7 @@ class MetroDisplay:
 
                 # Draw the line status
                 self.draw_text(line_text, 2, y_pos, status_color, self.font_small)
-                y_pos += 8
+                y_pos += 6
 
             # Update the display
             self.matrix.SetImage(self.image)
