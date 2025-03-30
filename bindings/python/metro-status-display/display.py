@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import select
+import threading
 
 # Configure logging
 logging.basicConfig(
@@ -23,18 +24,20 @@ class MetroDisplay:
         self.options.chain_length = 1
         self.options.parallel = 1
         self.options.hardware_mapping = "regular"
-        self.options.gpio_slowdown = 2  # Try a lower value
+        self.options.gpio_slowdown = 4  # Increased for better stability
         self.options.drop_privileges = True
-        self.options.brightness = 50  # Ensure content is visible
+        self.options.brightness = 70  # Higher brightness to prevent shutoff
 
-        # More conservative settings
-        self.options.pwm_bits = 11  # Default value - often most stable
-        self.options.pwm_lsb_nanoseconds = 130  # Default value
-        self.options.limit_refresh_rate_hz = 0  # Auto
+        # Simpler PWM settings for stability
+        self.options.pwm_bits = 8  # Lower value for simplicity
+        self.options.pwm_lsb_nanoseconds = 70  # Lower for faster cycles
+        self.options.limit_refresh_rate_hz = 100  # Fast enough to avoid dropout
         self.options.scan_mode = 0  # Progressive scan
-        self.options.multiplexing = 0  # No multiplexing
-        self.options.disable_hardware_pulsing = False  # Use hardware pulsing
-        self.options.show_refresh_rate = 0  # Disable for production
+        self.options.multiplexing = 0
+        self.options.disable_hardware_pulsing = (
+            True  # Use software pulsing for consistent display
+        )
+        self.options.show_refresh_rate = 0
         self.options.inverse_colors = False
 
         # Initialize the matrix with error handling
@@ -49,7 +52,9 @@ class MetroDisplay:
             sys.exit(1)
 
         # Initialize display buffers with visible content
-        self.image = Image.new("RGB", (64, 32), (1, 1, 1))
+        self.image = Image.new(
+            "RGB", (64, 32), (3, 3, 3)
+        )  # Slightly brighter background
         self.draw = ImageDraw.Draw(self.image)
         self.prev_image = None  # Store previous frame for caching
 
@@ -58,8 +63,11 @@ class MetroDisplay:
         self.setup_colors()
 
         # Draw initial content to show display is active
-        self.draw.rectangle([(0, 0), (63, 31)], fill=(1, 1, 1))
-        self.draw_5x7_text(5, 12, "LOADING", (255, 255, 255))
+        self.draw_5x7_text(5, 12, "LOADING", (255, 255, 255), background=(5, 5, 5))
+        self.matrix.SetImage(self.image)
+
+        # Force a redraw with a slight delay to keep the display active
+        time.sleep(0.5)
         self.matrix.SetImage(self.image)
 
         # Set up signal handlers
@@ -73,9 +81,10 @@ class MetroDisplay:
             "weekend": (255, 255, 0),  # Yellow
             "alert": (255, 0, 0),  # Red
             "white": (255, 255, 255),
-            "off": (1, 1, 1),  # Very dark gray instead of completely black
+            "off": (3, 3, 3),  # Dark gray instead of black
             "green_line": (0, 154, 39),  # Green line color
             "orange_line": (238, 125, 0),  # Orange line color
+            "background": (5, 5, 5),  # Background color for text
         }
 
     def setup_5x7_font(self):
@@ -276,7 +285,11 @@ class MetroDisplay:
 
             # Draw all elements to the new buffer
             self.draw_5x7_text(
-                2, 2, station_data["current_time_period"].upper(), period_color
+                2,
+                2,
+                station_data["current_time_period"].upper(),
+                period_color,
+                background=self.colors["background"],  # Add background to text
             )
 
             # Draw line statuses
@@ -300,7 +313,13 @@ class MetroDisplay:
                 freq = line_data["current_frequency"].replace("minutes", "min")
                 freq_text = f" {freq}!" if has_alert else f" {freq}"
                 text_color = self.colors["alert"] if has_alert else self.colors["white"]
-                self.draw_5x7_text(10, y_pos, freq_text, text_color)
+                self.draw_5x7_text(
+                    10,
+                    y_pos,
+                    freq_text,
+                    text_color,
+                    background=self.colors["background"],
+                )  # Add background to text
 
                 y_pos += line_spacing
 
@@ -318,6 +337,18 @@ class MetroDisplay:
             self.image = new_image
             self.matrix.SetImage(self.image)
             self.prev_image = new_image
+
+            # Set up a delayed redraw to prevent display from turning off
+            def delayed_redraw():
+                time.sleep(2)  # Wait 2 seconds
+                try:
+                    # Re-set the image to keep display active
+                    self.matrix.SetImage(self.image)
+                except Exception as e:
+                    logging.error(f"Error in delayed redraw: {e}")
+
+            # Start thread for delayed redraw to keep display active
+            threading.Thread(target=delayed_redraw, daemon=True).start()
 
         except Exception as e:
             logging.error(f"Error updating display: {e}")
@@ -349,7 +380,7 @@ class MetroDisplay:
             if x < img.width and y < img.height:
                 pixel = img.getpixel((x, y))
                 # Check if pixel has any meaningful brightness
-                if max(pixel) > 10:
+                if max(pixel) > 15:  # Increased threshold
                     return False
         return True
 
@@ -381,30 +412,44 @@ def main():
 
         # Initialize update tracking
         last_update_time = 0
-        min_update_interval = 60  # Increase minimum update interval for stability
+        min_update_interval = 30  # Shorter update interval
         last_data = None
 
-        # Buffer for handling partial JSON data
-        data_buffer = ""
+        # Initialize last refresh time for display keep-alive
+        last_refresh_time = time.time()
+        refresh_interval = (
+            1.0  # Refresh every second to prevent display from turning off
+        )
 
         # Main processing loop
         try:
             while True:
                 try:
-                    # Calculate time since last update
+                    # Current time
                     current_time = time.time()
+
+                    # Periodic display refresh to keep display active
+                    if current_time - last_refresh_time >= refresh_interval:
+                        if display.image:
+                            # Refresh current image to keep display active
+                            display.matrix.SetImage(display.image)
+                            last_refresh_time = current_time
+
+                    # Calculate time since last update
                     time_since_last_update = current_time - last_update_time
 
                     # Check if we should process new data
                     if time_since_last_update >= min_update_interval:
                         # Read input with timeout to avoid blocking
-                        rlist, _, _ = select.select([sys.stdin], [], [], 0.5)
+                        rlist, _, _ = select.select(
+                            [sys.stdin], [], [], 0.1
+                        )  # Shorter timeout
 
                         if rlist:
                             # Read a chunk of data
                             chunk = sys.stdin.readline()
                             if not chunk:
-                                time.sleep(1)
+                                time.sleep(0.1)  # Short sleep
                                 continue
 
                             # Try to process it as complete JSON
@@ -419,7 +464,7 @@ def main():
                                     logging.warning(
                                         "Received incomplete station data, skipping update"
                                     )
-                                    time.sleep(1)
+                                    time.sleep(0.1)  # Short sleep
                                     continue
 
                                 # Update display
@@ -429,66 +474,92 @@ def main():
                                 last_data = station_data
 
                                 # Force a small delay after updating
-                                time.sleep(1)
-
+                                time.sleep(0.1)  # Short sleep
                             except json.JSONDecodeError:
-                                # Possibly incomplete data, log and continue
-                                logging.warning(
-                                    "Received invalid JSON data, skipping update"
-                                )
-                                time.sleep(1)
+                                logging.warning("Received invalid JSON data")
+                                time.sleep(0.1)  # Short sleep
                         else:
                             # No data available, sleep briefly
-                            time.sleep(0.5)
+                            time.sleep(0.1)  # Short sleep
                     else:
-                        # Not time to update yet
+                        # Not time to update yet - short sleep
                         time.sleep(
-                            min(1.0, (min_update_interval - time_since_last_update) / 2)
-                        )
+                            0.1
+                        )  # Short sleep to allow for frequent display refreshes
 
                         # If it's been a long time since we've seen data, display a message
                         if (
-                            current_time - last_update_time > 180 and last_data is None
-                        ):  # 3 minutes with no data
-                            # Create a waiting display
-                            wait_image = Image.new("RGB", (64, 32), (1, 1, 1))
+                            current_time - last_update_time > 120 and last_data is None
+                        ):  # 2 minutes with no data
+                            # Create a waiting display with prominent text
+                            wait_image = Image.new("RGB", (64, 32), (3, 3, 3))
                             wait_draw = ImageDraw.Draw(wait_image)
 
                             # Temporarily switch drawing surface
                             temp_draw, temp_image = display.draw, display.image
                             display.draw, display.image = wait_draw, wait_image
 
-                            # Draw waiting message
-                            display.draw_5x7_text(5, 12, "WAITING", (0, 200, 0))
+                            # Draw waiting message with background
+                            display.draw_5x7_text(
+                                5, 12, "WAITING", (0, 255, 0), background=(5, 5, 5)
+                            )
 
                             # Restore drawing surface and update display
                             display.draw, display.image = temp_draw, temp_image
                             display.matrix.SetImage(wait_image)
 
+                            # Update last refresh time since we just refreshed
+                            last_refresh_time = current_time
+
                             # Wait a bit before trying again
-                            time.sleep(5)
+                            time.sleep(1)
 
                 except json.JSONDecodeError as e:
                     logging.error(f"Error parsing JSON: {e}")
-                    time.sleep(5)
+                    time.sleep(0.5)
                 except Exception as e:
                     logging.error(f"Unexpected error in main loop: {e}")
-                    time.sleep(5)
+                    time.sleep(0.5)
+
+                    # Ensure display is still active
+                    if display and display.image:
+                        display.matrix.SetImage(display.image)
 
         except KeyboardInterrupt:
             logging.info("Display stopped by user")
         finally:
-            # Clean shutdown
+            # Clean shutdown - display a goodbye message before clearing
             if display:
                 try:
-                    # Clear the display without using the high-level clear method
-                    blank_image = Image.new("RGB", (64, 32), (1, 1, 1))
-                    display.matrix.SetImage(blank_image)
-                    time.sleep(0.2)
+                    # Create goodbye message
+                    goodbye_image = Image.new("RGB", (64, 32), (3, 3, 3))
+                    goodbye_draw = ImageDraw.Draw(goodbye_image)
+
+                    # Temporarily switch drawing surface
+                    temp_draw, temp_image = display.draw, display.image
+                    display.draw, display.image = goodbye_draw, goodbye_image
+
+                    # Draw goodbye message
+                    display.draw_5x7_text(
+                        2, 12, "GOODBYE", (0, 100, 255), background=(5, 5, 5)
+                    )
+
+                    # Restore drawing surface and show message
+                    display.draw, display.image = temp_draw, temp_image
+                    display.matrix.SetImage(goodbye_image)
+
+                    # Pause briefly to show message
+                    time.sleep(1)
+
+                    # Now clear the display
                     display.matrix.Clear()
                     logging.info("Display shut down cleanly")
                 except Exception as e:
                     logging.error(f"Error during shutdown: {e}")
+                    try:
+                        display.matrix.Clear()
+                    except:
+                        pass
 
     except Exception as e:
         logging.error(f"Critical error: {e}")
