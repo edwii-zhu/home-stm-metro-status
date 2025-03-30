@@ -338,11 +338,13 @@ class MetroDisplay:
                 # Determine alert status for visual indicator
                 has_alert = line_data["status"] == "alert"
 
-                # Determine line color based on line name
+                # Determine line color based on first letter of the line name
+                first_letter = line_data["name"][0].upper()
                 circle_color = self.colors["white"]  # Default color
-                if line_data["name"].lower() == "green":
+
+                if first_letter == "G":
                     circle_color = self.colors["green_line"]
-                elif line_data["name"].lower() == "orange":
+                elif first_letter == "O":
                     circle_color = self.colors["orange_line"]
 
                 # Draw colored circle for the line with larger radius for better visibility
