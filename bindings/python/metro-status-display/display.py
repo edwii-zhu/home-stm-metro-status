@@ -24,17 +24,17 @@ class MetroDisplay:
         self.options.chain_length = 1
         self.options.parallel = 1
         self.options.hardware_mapping = "regular"
-        self.options.gpio_slowdown = 1  # Minimal slowdown
+        self.options.gpio_slowdown = 2  # Increased slowdown to reduce CPU impact
         self.options.drop_privileges = True
         self.options.brightness = 20  # Lower brightness
 
         # Very simple, default PWM settings
         self.options.pwm_bits = 8  # Lower value
         self.options.pwm_lsb_nanoseconds = 200  # Higher value
-        self.options.limit_refresh_rate_hz = 0  # Auto/default
+        self.options.limit_refresh_rate_hz = 100  # Limit refresh rate
         self.options.scan_mode = 0  # Progressive scan (default)
         self.options.multiplexing = 0  # Default
-        self.options.disable_hardware_pulsing = False  # Hardware pulsing (default)
+        self.options.disable_hardware_pulsing = True  # Disable hardware pulsing
         self.options.show_refresh_rate = 0
         self.options.inverse_colors = False
 
@@ -305,14 +305,41 @@ class MetroDisplay:
             # Restore original drawing surfaces
             self.draw, self.image = temp_draw, temp_image
 
-            # Update display once - no continuous refreshing
-            self.image = new_image
-            self.matrix.SetImage(self.image)
-            self.prev_image = new_image
+            # Check if new image is significantly different from current display
+            # Only update the display if needed to prevent unnecessary refreshes
+            if (
+                self.prev_image is None
+                or self._image_difference(new_image, self.prev_image) > 0.05
+            ):
+                # Update display once - no continuous refreshing
+                self.image = new_image
+                self.matrix.SetImage(self.image)
+                self.prev_image = new_image
+                logging.debug("Display updated with new content")
+            else:
+                logging.debug("Skipping display update - no significant changes")
 
         except Exception as e:
             logging.error(f"Error updating display: {e}")
             self.show_error()
+
+    def _image_difference(self, img1, img2):
+        """Calculate how different two images are (0.0 to 1.0)."""
+        if img1.size != img2.size:
+            return 1.0  # Different sizes means completely different
+
+        # Convert to grayscale for simpler comparison
+        img1_gray = img1.convert("L")
+        img2_gray = img2.convert("L")
+
+        # Calculate difference, normalize, and count significant differences
+        diff = ImageChops.difference(img1_gray, img2_gray)
+        diff_pixels = sum(
+            1 for p in diff.getdata() if p > 10
+        )  # Threshold for significant difference
+
+        # Return ratio of different pixels
+        return diff_pixels / (img1.width * img1.height)
 
     def _is_empty_image(self, img):
         """Check if image is empty or very close to black."""
@@ -415,7 +442,9 @@ def main():
                             logging.error(f"Error reading data: {e}")
 
                     # Sleep for a longer period - no constant refreshing needed
-                    time.sleep(1.0)
+                    time.sleep(
+                        3.0
+                    )  # Increased sleep time to reduce CPU load and potential flicker
 
                 except Exception as e:
                     logging.error(f"Unexpected error in main loop: {e}")
