@@ -43,85 +43,8 @@ class MetroDisplay:
         self.image = Image.new("RGB", (64, 32))
         self.draw = ImageDraw.Draw(self.image)
 
-        # Load fonts with priority on Terminus pixel fonts
-        try:
-            # Terminus font paths (installed via fonts-terminus package)
-            terminus_font_paths = [
-                # TTF versions
-                "/usr/share/fonts/truetype/terminus/TerminusTTF-Bold-4.39.ttf",
-                "/usr/share/fonts/truetype/terminus/TerminusTTF-4.39.ttf",
-                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF-Bold-4.39.ttf",
-                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF-4.39.ttf",
-                # Older versions without version number
-                "/usr/share/fonts/truetype/terminus/TerminusTTF-Bold.ttf",
-                "/usr/share/fonts/truetype/terminus/TerminusTTF.ttf",
-                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF-Bold.ttf",
-                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF.ttf",
-            ]
-
-            # Try to load Terminus font first (best for LED matrix)
-            font_loaded = False
-            for font_path in terminus_font_paths:
-                try:
-                    # For Terminus font, use sizes that work well with LED matrices
-                    # Terminus is designed for pixel-perfect rendering
-                    self.font_small = ImageFont.truetype(
-                        font_path, 8
-                    )  # 8px is a standard Terminus size
-                    self.font_large = ImageFont.truetype(
-                        font_path, 12
-                    )  # 12px is another standard size
-                    logging.info(
-                        f"Successfully loaded Terminus pixel font: {font_path}"
-                    )
-                    font_loaded = True
-                    self.using_pixel_font = True
-                    break
-                except Exception as e:
-                    logging.warning(f"Could not load Terminus font {font_path}: {e}")
-                    continue
-
-            # If Terminus font failed, try regular TTF fonts
-            if not font_loaded:
-                # Font paths for Raspberry Pi OS
-                ttf_font_paths = [
-                    # Common Raspberry Pi OS font paths
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Common on Pi
-                    "/usr/share/fonts/truetype/piboto/PibotoLt-Regular.ttf",  # Pi-specific font
-                    "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSansMono.ttf",  # Alternative path
-                    # Fallback system fonts
-                    "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
-                    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-                    # Final fallback - use default font
-                    "DejaVuSansMono.ttf",
-                ]
-
-                for font_path in ttf_font_paths:
-                    try:
-                        # Use small pixel-sized fonts for LED matrix
-                        self.font_small = ImageFont.truetype(font_path, 5)
-                        self.font_large = ImageFont.truetype(font_path, 7)
-                        logging.info(f"Successfully loaded font: {font_path}")
-                        font_loaded = True
-                        self.using_pixel_font = False
-                        break
-                    except Exception as e:
-                        logging.warning(f"Could not load font {font_path}: {e}")
-                        continue
-
-            # If no fonts were loaded, use default font as last resort
-            if not font_loaded:
-                logging.warning("No system fonts found, using fallback pixel font")
-                self.font_small = ImageFont.load_default()
-                self.font_large = ImageFont.load_default()
-                self.using_pixel_font = False
-        except Exception as e:
-            logging.error(f"Error loading all fonts: {e}")
-            # Continue anyway with default font
-            self.font_small = ImageFont.load_default()
-            self.font_large = ImageFont.load_default()
-            self.using_pixel_font = False
-            logging.warning("Using PIL default font as fallback")
+        # Try to find and load fonts
+        self.load_fonts()
 
         # Colors with adjusted brightness for better contrast
         self.colors = {
@@ -135,6 +58,179 @@ class MetroDisplay:
         # Set up signal handlers
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
+
+    def try_install_terminus_font(self):
+        """Attempt to install the Terminus font if we have permission."""
+        try:
+            logging.info("Attempting to install Terminus font...")
+            # Check if we're running as root (or can use sudo)
+            import subprocess
+            import os
+
+            # Try both with and without sudo
+            cmds = [
+                "apt-get update && apt-get install -y fonts-terminus",
+                "sudo apt-get update && sudo apt-get install -y fonts-terminus",
+            ]
+
+            for cmd in cmds:
+                try:
+                    logging.info(f"Running: {cmd}")
+                    subprocess.check_call(cmd, shell=True)
+                    logging.info("Successfully installed Terminus font!")
+                    return True
+                except subprocess.CalledProcessError as e:
+                    logging.warning(f"Command failed: {e}")
+                except Exception as e:
+                    logging.warning(f"Error running command: {e}")
+
+            # If we get here, both attempts failed
+            logging.error("Could not install Terminus font automatically.")
+            logging.error("Please run: sudo apt-get install fonts-terminus")
+            return False
+        except Exception as e:
+            logging.error(f"Error attempting to install font: {e}")
+            return False
+
+    def load_fonts(self):
+        """Load fonts with priority on Terminus pixel fonts."""
+        try:
+            # First try discovering fonts using fc-list (fontconfig)
+            self.discover_fonts_with_fc_list()
+
+            # Try to find Terminus fonts on the system using find command as fallback
+            try:
+                import subprocess
+
+                # Run find command to locate Terminus fonts on the system
+                find_cmd = "find /usr/share/fonts -name '*erminus*' -type f | sort"
+                logging.info(f"Searching for Terminus fonts with: {find_cmd}")
+                font_locations = subprocess.check_output(
+                    find_cmd, shell=True, text=True
+                )
+                for line in font_locations.splitlines():
+                    logging.info(f"Found potential font: {line}")
+            except Exception as e:
+                logging.warning(f"Could not search for fonts: {e}")
+
+            # Terminus font paths (expanded to include more possible locations for older Raspberry Pi models)
+            terminus_font_paths = [
+                # Older Raspbian paths (especially for Raspberry Pi 2 Model B)
+                "/usr/share/fonts/truetype/ttf-dejavu/Terminus.ttf",
+                "/usr/share/fonts/truetype/ttf-bitstream-vera/Terminus.ttf",
+                "/usr/share/fonts/X11/misc/ter-u12n.pcf.gz",  # Common PCF terminus on older systems
+                "/usr/share/fonts/X11/misc/ter-u16n.pcf.gz",
+                "/usr/share/fonts/X11/terminus/ter-u12n.pcf.gz",
+                "/usr/share/fonts/X11/terminus/ter-u16n.pcf.gz",
+                # Custom installed paths
+                "/usr/local/share/fonts/terminus.ttf",
+                "/usr/local/share/fonts/Terminus.ttf",
+                "/home/pi/.fonts/terminus.ttf",
+                "/home/pi/.fonts/Terminus.ttf",
+                # Standard paths from before
+                "/usr/share/fonts/truetype/terminus/Terminus.ttf",
+                "/usr/share/fonts/truetype/terminus-ttf/Terminus.ttf",
+                "/usr/share/fonts/truetype/xterm/Terminus.ttf",
+                "/usr/share/fonts/truetype/terminus/TerminusTTF-4.39.ttf",
+                "/usr/share/fonts/truetype/terminus/TerminusTTF-Bold-4.39.ttf",
+                "/usr/share/fonts/X11/PCF/terminus-bold.pcf.gz",
+                "/usr/share/fonts/X11/PCF/terminus.pcf.gz",
+                "/usr/share/fonts/truetype/terminus/TerminusTTF.ttf",
+                "/usr/share/fonts/truetype/terminus/TerminusTTF-Bold.ttf",
+            ]
+
+            # Add any discovered font paths
+            if hasattr(self, "discovered_fonts"):
+                terminus_font_paths = self.discovered_fonts + terminus_font_paths
+
+            # Try to load Terminus font first (best for LED matrix)
+            font_loaded = False
+            for font_path in terminus_font_paths:
+                try:
+                    # Check if file exists before trying to load it
+                    if not os.path.exists(font_path):
+                        continue
+
+                    # For Terminus font, use sizes that work well with LED matrices
+                    # Terminus is designed for pixel-perfect rendering
+                    if font_path.endswith(".pcf.gz"):
+                        # PCF fonts need special handling
+                        self.font_small = ImageFont.load(font_path)
+                        self.font_large = self.font_small
+                    else:
+                        # TTF versions can be loaded with different sizes
+                        # For older Raspberry Pi with lower resolution, use smaller sizes
+                        self.font_small = ImageFont.truetype(
+                            font_path, 6
+                        )  # Smaller for old Pi
+                        self.font_large = ImageFont.truetype(
+                            font_path, 10
+                        )  # Smaller for old Pi
+
+                    logging.info(
+                        f"Successfully loaded Terminus/pixel font: {font_path}"
+                    )
+                    font_loaded = True
+                    self.using_pixel_font = True
+                    break
+                except Exception as e:
+                    continue
+
+            # If no fonts were loaded, use default font as last resort
+            if not font_loaded:
+                # Just use the default PIL font which should work everywhere
+                logging.warning("No system fonts found, using fallback default font")
+                self.font_small = ImageFont.load_default()
+                self.font_large = ImageFont.load_default()
+                self.using_pixel_font = False
+        except Exception as e:
+            logging.error(f"Error loading all fonts: {e}")
+            # Continue anyway with default font
+            self.font_small = ImageFont.load_default()
+            self.font_large = ImageFont.load_default()
+            self.using_pixel_font = False
+            logging.warning("Using PIL default font as fallback")
+
+    def discover_fonts_with_fc_list(self):
+        """Try to discover font paths using fontconfig's fc-list command."""
+        try:
+            import subprocess
+
+            # Try using fontconfig to find terminus fonts (more reliable than find)
+            try:
+                logging.info("Trying to find fonts using fc-list...")
+                fc_cmd = "fc-list : file | grep -i terminus"
+                font_list = subprocess.check_output(fc_cmd, shell=True, text=True)
+
+                # Parse the output and extract font paths
+                self.discovered_fonts = []
+                for line in font_list.splitlines():
+                    # fc-list output format is usually: /path/to/font.ttf: FontName,Style
+                    if ":" in line:
+                        font_path = line.split(":", 1)[0].strip()
+                        if os.path.exists(font_path):
+                            self.discovered_fonts.append(font_path)
+                            logging.info(f"Discovered font with fc-list: {font_path}")
+            except Exception as e:
+                logging.warning(f"fc-list search failed: {e}")
+
+            # If fc-list didn't work, try a simpler approach with fc-match
+            if not hasattr(self, "discovered_fonts") or not self.discovered_fonts:
+                try:
+                    logging.info("Trying fc-match for Terminus...")
+                    fc_match_cmd = 'fc-match -v terminus | grep file: | cut -d\\" -f2'
+                    font_path = subprocess.check_output(
+                        fc_match_cmd, shell=True, text=True
+                    ).strip()
+                    if font_path and os.path.exists(font_path):
+                        self.discovered_fonts = [font_path]
+                        logging.info(f"Discovered font with fc-match: {font_path}")
+                except Exception as e:
+                    logging.warning(f"fc-match search failed: {e}")
+                    self.discovered_fonts = []
+        except Exception as e:
+            logging.warning(f"Font discovery with fontconfig failed: {e}")
+            self.discovered_fonts = []
 
     def signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
