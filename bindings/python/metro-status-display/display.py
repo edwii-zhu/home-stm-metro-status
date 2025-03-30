@@ -22,16 +22,19 @@ class MetroDisplay:
         self.options.chain_length = 1
         self.options.parallel = 1
         self.options.hardware_mapping = "regular"
-        self.options.gpio_slowdown = 4
+        self.options.gpio_slowdown = 5  # Increased from 4 to 5 for more stable timing
         self.options.drop_privileges = True
-        self.options.brightness = 50
+        self.options.brightness = 40  # Reduced from 50 to lower power draw
 
         # Lower refresh rate and adjust timing
-        self.options.pwm_bits = 8  # Lower PWM bits (default is 11)
-        self.options.pwm_lsb_nanoseconds = 130  # Increase LSB timing
-        self.options.limit_refresh_rate_hz = 10  # Limit refresh rate to 100Hz
-        self.options.scan_mode = 1  # Progressive scan mode
-        self.options.show_refresh_rate = 1  # Show refresh rate for debugging
+        self.options.pwm_bits = 7  # Reduced from 8 for more stable operation
+        self.options.pwm_lsb_nanoseconds = (
+            200  # Increased from 130 for more stable timing
+        )
+        self.options.limit_refresh_rate_hz = 60  # Reduced from 100Hz to 60Hz
+        self.options.scan_mode = 0  # Changed to 0 for more stable progressive scanning
+        self.options.multiplexing = 0  # Disable multiplexing for simpler operation
+        self.options.show_refresh_rate = 1  # Keep for debugging
 
         # Initialize the matrix with error handling
         try:
@@ -249,7 +252,9 @@ def main():
 
                     station_data = json.loads(line)
                     display.update_display(station_data)
-                    time.sleep(30)
+                    # Add a small delay after each update to let the display stabilize
+                    time.sleep(0.1)
+                    time.sleep(30)  # Regular update interval
 
                 except json.JSONDecodeError as e:
                     logging.error(f"Error parsing JSON: {e}")
@@ -263,7 +268,10 @@ def main():
         except KeyboardInterrupt:
             logging.info("Display stopped by user")
         finally:
+            # Ensure clean shutdown
+            time.sleep(0.1)  # Let any pending operations complete
             display.clear()
+            time.sleep(0.1)  # Let the clear operation complete
             display.matrix.Clear()
 
     except Exception as e:
