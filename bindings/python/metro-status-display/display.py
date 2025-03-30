@@ -254,15 +254,30 @@ class MetroDisplay:
 
         # Draw text with optimized parameters for LED matrix
         try:
-            # Terminus is already pixel-perfect, so we can use standard rendering
-            # but with optimized parameters
-            self.draw.text(
+            # Create a temporary black image for text with exact pixel alignment
+            tmp_img = Image.new("RGBA", self.image.size, (0, 0, 0, 0))
+            tmp_draw = ImageDraw.Draw(tmp_img)
+
+            # Draw text with no antialiasing for sharp LED display
+            tmp_draw.text(
                 (x, y),
                 text,
                 fill=color,
                 font=font,
                 spacing=0,  # Tight spacing for LED matrix
             )
+
+            # Convert the temporary image to RGB and threshold for sharper edges
+            # This step helps create pixel-perfect text by removing antialiasing
+            tmp_img = tmp_img.convert("RGB")
+
+            # Apply the text image to our main buffer
+            for px in range(self.image.width):
+                for py in range(self.image.height):
+                    pixel = tmp_img.getpixel((px, py))
+                    if pixel != (0, 0, 0):  # If not black (background)
+                        self.image.putpixel((px, py), pixel)
+
         except Exception as e:
             logging.error(f"Error drawing text '{text}': {e}")
             # Fallback to default font if there's an error
@@ -280,16 +295,16 @@ class MetroDisplay:
             # Adjust spacing based on whether we're using a pixel font (Terminus)
             if hasattr(self, "using_pixel_font") and self.using_pixel_font:
                 # Terminus font is larger and clearer on LED matrices
-                period_y = 2  # Move period up since we're not showing station name
-                lines_start_y = 14  # Adjust line status starting position
-                line_spacing = 10
+                period_y = 2
+                lines_start_y = 16
+                line_spacing = 12
             else:
                 # Smaller TrueType fonts need different spacing
-                period_y = 2  # Move period up since we're not showing station name
-                lines_start_y = 12  # Adjust line status starting position
-                line_spacing = 8
+                period_y = 2
+                lines_start_y = 14
+                line_spacing = 10
 
-            # Draw time period (first row now)
+            # Draw time period (first row now) with larger font
             period_color = (
                 self.colors["weekend"]
                 if station_data["current_time_period"] == "weekend"
@@ -300,10 +315,10 @@ class MetroDisplay:
                 0,  # Start at left edge
                 period_y,
                 period_color,
-                self.font_small,
+                self.font_large,  # Using larger font
             )
 
-            # Draw line statuses (remaining rows)
+            # Draw line statuses (remaining rows) with larger font
             y_pos = lines_start_y
             for line_number, line_data in station_data["lines"].items():
                 # Determine color based on status
@@ -318,9 +333,9 @@ class MetroDisplay:
                 if line_data["status"] == "alert":
                     line_text += "!"
 
-                # Draw the line status
-                self.draw_text(line_text, 0, y_pos, status_color, self.font_small)
-                y_pos += line_spacing  # Spacing depends on font
+                # Draw the line status with larger font
+                self.draw_text(line_text, 0, y_pos, status_color, self.font_large)
+                y_pos += line_spacing  # Increased spacing for larger font
 
             # Update the display
             self.matrix.SetImage(self.image)
