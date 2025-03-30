@@ -13,33 +13,6 @@ check_root() {
     fi
 }
 
-# Function to install system dependencies
-install_system_deps() {
-    echo "Installing system dependencies..."
-    apt-get update
-    apt-get install -y \
-        python3-dev \
-        python3-pip \
-        git \
-        fonts-terminus \
-        fontconfig
-}
-
-# Function to install Python dependencies
-install_python_deps() {
-    echo "Installing Python dependencies..."
-    pip3 install -r ../requirements.txt
-}
-
-# Function to install LED matrix library
-install_led_matrix() {
-    echo "Installing LED matrix library..."
-    cd ../../../../
-    make build-python
-    make install-python
-    cd bindings/python/metro-status-display/deploy
-}
-
 # Function to setup log files
 setup_logs() {
     echo "Setting up log files..."
@@ -112,9 +85,6 @@ main() {
     fi
     
     # Run deployment steps
-    install_system_deps
-    install_python_deps
-    install_led_matrix
     configure_hardware
     setup_logs
     setup_service
