@@ -44,39 +44,52 @@ class MetroDisplay:
 
         # Load fonts - try bitmap fonts specifically optimized for LED matrices
         try:
-            # First try bitmap fonts that are better for LED matrices
+            # Font paths for Raspberry Pi OS
             font_paths = [
-                "/usr/share/fonts/X11/misc/6x10.pcf.gz",  # Common bitmap font
-                "/usr/share/fonts/X11/misc/5x7.pcf.gz",  # Small bitmap font
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Fallback
+                # Common Raspberry Pi OS font paths
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Common on Pi
+                "/usr/share/fonts/truetype/piboto/PibotoLt-Regular.ttf",  # Pi-specific font
+                "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSansMono.ttf",  # Alternative path
+                # Fallback system fonts
+                "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                # Final fallback - use default font
+                "DejaVuSansMono.ttf",
             ]
 
             # Try each font until one works
+            font_loaded = False
             for font_path in font_paths:
                 try:
-                    if font_path.endswith(".pcf.gz"):
-                        # For bitmap fonts, size doesn't matter as much
-                        self.font_small = ImageFont.load(font_path)
-                        self.font_large = self.font_small
-                        logging.info(f"Using bitmap font: {font_path}")
-                        break
-                    elif font_path.endswith(".ttf"):
-                        # For TrueType fonts, use precise sizes
+                    # Try different font sizes for better LED matrix rendering
+                    if font_path == "DejaVuSansMono.ttf":  # Default font
                         self.font_small = ImageFont.truetype(font_path, 5)
                         self.font_large = ImageFont.truetype(font_path, 7)
-                        logging.info(f"Using TrueType font: {font_path}")
-                        break
+                    else:  # Specific path
+                        self.font_small = ImageFont.truetype(font_path, 5)
+                        self.font_large = ImageFont.truetype(font_path, 7)
+
+                    logging.info(f"Successfully loaded font: {font_path}")
+                    font_loaded = True
+                    break
                 except Exception as e:
                     logging.warning(f"Could not load font {font_path}: {e}")
                     continue
-            else:
-                # If no fonts worked, try system defaults
-                self.font_small = ImageFont.truetype("DejaVuSansMono.ttf", 5)
-                self.font_large = ImageFont.truetype("DejaVuSansMono.ttf", 7)
-                logging.warning("Using system default fonts")
+
+            # If no fonts were loaded, create a simple pixel font as last resort
+            if not font_loaded:
+                logging.warning("No system fonts found, using fallback pixel font")
+                # Create a simple pixel font object
+                from PIL import ImageFont
+
+                self.font_small = ImageFont.load_default()
+                self.font_large = ImageFont.load_default()
         except Exception as e:
             logging.error(f"Error loading all fonts: {e}")
-            sys.exit(1)
+            # Continue anyway with default font
+            self.font_small = ImageFont.load_default()
+            self.font_large = ImageFont.load_default()
+            logging.warning("Using PIL default font as fallback")
 
         # Colors with adjusted brightness for better contrast
         self.colors = {
