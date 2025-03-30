@@ -22,14 +22,16 @@ class MetroDisplay:
         self.options.chain_length = 1
         self.options.parallel = 1
         self.options.hardware_mapping = "regular"
-        self.options.gpio_slowdown = 7  # Further increased for maximum stability
+        self.options.gpio_slowdown = 4  # Reduced to stay within valid range
         self.options.drop_privileges = True
-        self.options.brightness = 30  # Further reduced for stability
+        self.options.brightness = 25  # Further reduced for less power draw
 
         # Aggressive optimization for stability
         self.options.pwm_bits = 6  # Minimal PWM bits for stability
-        self.options.pwm_lsb_nanoseconds = 300  # Significantly increased timing
-        self.options.limit_refresh_rate_hz = 30  # Very conservative refresh rate
+        self.options.pwm_lsb_nanoseconds = (
+            350  # Increased to compensate for lower gpio_slowdown
+        )
+        self.options.limit_refresh_rate_hz = 25  # Even more conservative refresh rate
         self.options.scan_mode = 0  # Progressive scan
         self.options.multiplexing = 0  # No multiplexing
         self.options.disable_hardware_pulsing = True  # More stable but uses more CPU
