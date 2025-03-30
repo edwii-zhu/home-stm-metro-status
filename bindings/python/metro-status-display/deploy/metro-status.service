@@ -1,17 +1,37 @@
 [Unit]
 Description=Metro Status LED Display Service
 After=network.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/home-stm-metro-status/bindings/python/metro-status-display
 Environment=PYTHONPATH=/home/pi/home-stm-metro-status/bindings/python
+Environment=DISPLAY=:0
+
+# Ensure the LED matrix has proper permissions
+ExecStartPre=/bin/sh -c 'chmod a+rw /dev/spidev* || true'
+ExecStartPre=/bin/sh -c 'chmod a+rw /dev/mem || true'
+
+# Start the display
 ExecStart=/usr/bin/python3 run_display.py
+
+# Restart configuration
 Restart=always
 RestartSec=10
+
+# Logging
 StandardOutput=append:/var/log/metro-status.log
 StandardError=append:/var/log/metro-status.error.log
+
+# Security settings
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target 

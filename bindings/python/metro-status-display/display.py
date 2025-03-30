@@ -56,8 +56,8 @@ class MetroDisplay:
             "alert": (255, 0, 0),  # Red
             "white": (255, 255, 255),
             "off": (0, 0, 0),
-            "green_line": (0, 200, 0),  # Green line color
-            "orange_line": (255, 165, 0),  # Orange line color
+            "green_line": (0, 154, 39),  # Green line color
+            "orange_line": (238, 125, 0),  # Orange line color
         }
 
         # Set up signal handlers

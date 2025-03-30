@@ -95,7 +95,6 @@
 
 ## Example Display Layout
 ```
-BERRI-UQAM
 Weekend
 
 G:4-8m N  O:4-8m N
