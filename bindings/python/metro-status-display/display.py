@@ -43,46 +43,84 @@ class MetroDisplay:
         self.image = Image.new("RGB", (64, 32))
         self.draw = ImageDraw.Draw(self.image)
 
-        # Load fonts - prioritize tom-thumb BDF font for LED matrices
+        # Load fonts with priority on Terminus pixel fonts
         try:
-            # We'll prioritize truetype fonts that work reliably
-            # Font paths for Raspberry Pi OS
-            ttf_font_paths = [
-                # Common Raspberry Pi OS font paths
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Common on Pi
-                "/usr/share/fonts/truetype/piboto/PibotoLt-Regular.ttf",  # Pi-specific font
-                "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSansMono.ttf",  # Alternative path
-                # Fallback system fonts
-                "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-                # Final fallback - use default font
-                "DejaVuSansMono.ttf",
+            # Terminus font paths (installed via fonts-terminus package)
+            terminus_font_paths = [
+                # TTF versions
+                "/usr/share/fonts/truetype/terminus/TerminusTTF-Bold-4.39.ttf",
+                "/usr/share/fonts/truetype/terminus/TerminusTTF-4.39.ttf",
+                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF-Bold-4.39.ttf",
+                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF-4.39.ttf",
+                # Older versions without version number
+                "/usr/share/fonts/truetype/terminus/TerminusTTF-Bold.ttf",
+                "/usr/share/fonts/truetype/terminus/TerminusTTF.ttf",
+                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF-Bold.ttf",
+                "/usr/share/fonts/truetype/terminus-ttf/TerminusTTF.ttf",
             ]
 
-            # Try each font until one works
+            # Try to load Terminus font first (best for LED matrix)
             font_loaded = False
-            for font_path in ttf_font_paths:
+            for font_path in terminus_font_paths:
                 try:
-                    # Use small pixel-sized fonts for LED matrix
-                    self.font_small = ImageFont.truetype(font_path, 5)
-                    self.font_large = ImageFont.truetype(font_path, 7)
-                    logging.info(f"Successfully loaded font: {font_path}")
+                    # For Terminus font, use sizes that work well with LED matrices
+                    # Terminus is designed for pixel-perfect rendering
+                    self.font_small = ImageFont.truetype(
+                        font_path, 8
+                    )  # 8px is a standard Terminus size
+                    self.font_large = ImageFont.truetype(
+                        font_path, 12
+                    )  # 12px is another standard size
+                    logging.info(
+                        f"Successfully loaded Terminus pixel font: {font_path}"
+                    )
                     font_loaded = True
+                    self.using_pixel_font = True
                     break
                 except Exception as e:
-                    logging.warning(f"Could not load font {font_path}: {e}")
+                    logging.warning(f"Could not load Terminus font {font_path}: {e}")
                     continue
+
+            # If Terminus font failed, try regular TTF fonts
+            if not font_loaded:
+                # Font paths for Raspberry Pi OS
+                ttf_font_paths = [
+                    # Common Raspberry Pi OS font paths
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Common on Pi
+                    "/usr/share/fonts/truetype/piboto/PibotoLt-Regular.ttf",  # Pi-specific font
+                    "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSansMono.ttf",  # Alternative path
+                    # Fallback system fonts
+                    "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                    # Final fallback - use default font
+                    "DejaVuSansMono.ttf",
+                ]
+
+                for font_path in ttf_font_paths:
+                    try:
+                        # Use small pixel-sized fonts for LED matrix
+                        self.font_small = ImageFont.truetype(font_path, 5)
+                        self.font_large = ImageFont.truetype(font_path, 7)
+                        logging.info(f"Successfully loaded font: {font_path}")
+                        font_loaded = True
+                        self.using_pixel_font = False
+                        break
+                    except Exception as e:
+                        logging.warning(f"Could not load font {font_path}: {e}")
+                        continue
 
             # If no fonts were loaded, use default font as last resort
             if not font_loaded:
                 logging.warning("No system fonts found, using fallback pixel font")
                 self.font_small = ImageFont.load_default()
                 self.font_large = ImageFont.load_default()
+                self.using_pixel_font = False
         except Exception as e:
             logging.error(f"Error loading all fonts: {e}")
             # Continue anyway with default font
             self.font_small = ImageFont.load_default()
             self.font_large = ImageFont.load_default()
+            self.using_pixel_font = False
             logging.warning("Using PIL default font as fallback")
 
         # Colors with adjusted brightness for better contrast
@@ -118,8 +156,10 @@ class MetroDisplay:
         # For perfect pixel alignment, ensure x and y are integers
         x, y = int(x), int(y)
 
-        # Use the standard PIL text drawing with optimized parameters
+        # Draw text with optimized parameters for LED matrix
         try:
+            # Terminus is already pixel-perfect, so we can use standard rendering
+            # but with optimized parameters
             self.draw.text(
                 (x, y),
                 text,
@@ -141,11 +181,25 @@ class MetroDisplay:
             # Clear the display
             self.clear()
 
+            # Adjust spacing based on whether we're using a pixel font (Terminus)
+            if hasattr(self, "using_pixel_font") and self.using_pixel_font:
+                # Terminus font is larger and clearer on LED matrices
+                title_y = 0
+                period_y = 12
+                lines_start_y = 20
+                line_spacing = 10
+            else:
+                # Smaller TrueType fonts need different spacing
+                title_y = 0
+                period_y = 8
+                lines_start_y = 16
+                line_spacing = 8
+
             # Draw station name (top row) - ensure pixel alignment
             self.draw_text(
                 station_data["station_name"],
                 0,  # Start at left edge for maximum space
-                0,  # Start at top edge for better alignment
+                title_y,
                 self.colors["white"],
                 self.font_large,
             )
@@ -159,13 +213,13 @@ class MetroDisplay:
             self.draw_text(
                 station_data["current_time_period"].upper(),
                 0,  # Start at left edge
-                8,  # Pixel-aligned position
+                period_y,
                 period_color,
                 self.font_small,
             )
 
             # Draw line statuses (remaining rows)
-            y_pos = 16  # Start position for lines
+            y_pos = lines_start_y
             for line_number, line_data in station_data["lines"].items():
                 # Determine color based on status
                 status_color = (
@@ -181,7 +235,7 @@ class MetroDisplay:
 
                 # Draw the line status
                 self.draw_text(line_text, 0, y_pos, status_color, self.font_small)
-                y_pos += 8  # Increase spacing for better readability
+                y_pos += line_spacing  # Spacing depends on font
 
             # Update the display
             self.matrix.SetImage(self.image)
@@ -194,9 +248,15 @@ class MetroDisplay:
         """Display error state on the LED matrix."""
         try:
             self.clear()
-            # Use basic drawing functions for error display
-            # Draw a simple "ERR" text in the center
-            self.draw.text((16, 12), "ERR", fill=self.colors["alert"])
+
+            # Use the best font we have for error display
+            if hasattr(self, "using_pixel_font") and self.using_pixel_font:
+                # With pixel font, we can show "ERROR" with good clarity
+                self.draw_text("ERROR", 12, 12, self.colors["alert"], self.font_large)
+            else:
+                # With smaller fonts, just show "ERR"
+                self.draw_text("ERR", 20, 12, self.colors["alert"], self.font_large)
+
             self.matrix.SetImage(self.image)
         except Exception as e:
             # If even the error display fails, try a more basic approach
