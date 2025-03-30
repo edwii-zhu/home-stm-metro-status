@@ -132,7 +132,7 @@ class TestTimePeriodsIntegration(unittest.TestCase):
             ("08:00", True, True, "am_peak"),  # AM peak (weekday)
             ("14:00", True, True, "off_peak"),  # Off-peak (weekday)
             ("17:00", True, True, "pm_peak"),  # PM peak (weekday)
-            ("22:00", True, True, "late_evening"),  # Late evening (weekday)
+            ("22:00", True, True, "evening"),  # Evening (weekday)
             ("13:00", False, True, "weekend"),  # Weekend
             ("01:30", True, False, "closed"),  # Closed (weekday)
             ("03:00", False, False, "closed"),  # Closed (weekend)
@@ -233,8 +233,8 @@ class TestLongRunning(unittest.TestCase):
             ("06:30", 90, True, "am_peak"),  # AM peak - extended rush hour
             ("12:00", 60, True, "off_peak"),  # Off-peak (midday)
             ("17:00", 90, True, "pm_peak"),  # PM peak - extended rush hour
-            ("21:30", 60, True, "late_evening"),  # Late evening
-            ("00:30", 30, True, "late_evening"),  # Late night (still operating)
+            ("21:30", 60, True, "evening"),  # Evening
+            ("00:30", 30, True, "evening"),  # Late night (still operating)
             ("01:30", 60, False, "closed"),  # Closed (overnight) - longer period
             # Additional transition test
             ("03:00", 30, False, "closed"),  # Still closed
@@ -569,7 +569,7 @@ class SampleDataGenerator:
             "am_peak": "2-4 minutes",
             "pm_peak": "2-4 minutes",
             "off_peak": "3-5 minutes",
-            "late_evening": "8-10 minutes",
+            "evening": "8-10 minutes",
             "weekend": "4-8 minutes",
         }
 
@@ -591,7 +591,7 @@ class SampleDataGenerator:
                         "am_peak": "2-4 minutes",
                         "pm_peak": "2-4 minutes",
                         "off_peak": "3-5 minutes",
-                        "late_evening": "8-10 minutes",
+                        "evening": "8-10 minutes",
                         "weekend": "4-8 minutes",
                     },
                     "status": "normal",
@@ -604,7 +604,7 @@ class SampleDataGenerator:
                         "am_peak": "2-4 minutes",
                         "pm_peak": "2-4 minutes",
                         "off_peak": "3-5 minutes",
-                        "late_evening": "8-10 minutes",
+                        "evening": "8-10 minutes",
                         "weekend": "4-8 minutes",
                     },
                     "status": "normal",
@@ -641,7 +641,7 @@ def run_mock_metro(extended=False, duration_minutes=5):
         "am_peak",
         "off_peak",
         "pm_peak",
-        "late_evening",
+        "evening",
         "weekend",
     ]
 
@@ -663,9 +663,9 @@ def run_mock_metro(extended=False, duration_minutes=5):
             (17, "pm_peak"),  # 5:00 PM - PM peak
             (18, "pm_peak"),  # 6:00 PM - PM peak
             (19, "off_peak"),  # 7:00 PM - Off-peak
-            (21, "late_evening"),  # 9:00 PM - Late evening
-            (23, "late_evening"),  # 11:00 PM - Late evening
-            (0, "late_evening"),  # 12:00 AM - Late evening
+            (21, "evening"),  # 9:00 PM - Evening
+            (23, "evening"),  # 11:00 PM - Evening
+            (0, "evening"),  # 12:00 AM - Evening
             (1, "closed"),  # 1:00 AM - Closed (after service ends)
             (2, "closed"),  # 2:00 AM - Closed
             (3, "closed"),  # 3:00 AM - Closed
@@ -954,7 +954,7 @@ if __name__ == "__main__":
                 {"period": "am_peak", "operating": True},
                 {"period": "off_peak", "operating": True},
                 {"period": "pm_peak", "operating": True},
-                {"period": "late_evening", "operating": True},
+                {"period": "evening", "operating": True},
                 {"period": "closed", "operating": False},  # Test closed state
             ]
 

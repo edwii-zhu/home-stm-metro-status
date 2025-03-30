@@ -32,7 +32,7 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "normal",
@@ -45,7 +45,7 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "normal",
@@ -69,7 +69,7 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "alert",
@@ -86,7 +86,7 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "normal",
@@ -110,7 +110,7 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "normal",
@@ -123,20 +123,20 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "normal",
             },
         },
     },
-    "late_evening": {
+    "evening": {
         "station_name": "Berri-UQAM",
         "operating_hours": {
             "weekday": "5:30 AM - 12:30 AM",
             "weekend": "5:30 AM - 1:00 AM",
         },
-        "current_time_period": "late_evening",
+        "current_time_period": "evening",
         "is_operating": True,
         "lines": {
             "1": {
@@ -147,7 +147,7 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "normal",
@@ -160,7 +160,7 @@ SAMPLE_DATA = {
                     "am_peak": "2-4 minutes",
                     "pm_peak": "2-4 minutes",
                     "off_peak": "3-5 minutes",
-                    "late_evening": "8-10 minutes",
+                    "evening": "8-10 minutes",
                     "weekend": "4-8 minutes",
                 },
                 "status": "normal",
@@ -180,7 +180,7 @@ SAMPLE_DATA = {
 }
 
 # Sequence of modes to cycle through
-SEQUENCE = ["normal", "alert", "weekend", "late_evening", "closed"]
+SEQUENCE = ["normal", "alert", "weekend", "evening", "closed"]
 
 
 def main():
