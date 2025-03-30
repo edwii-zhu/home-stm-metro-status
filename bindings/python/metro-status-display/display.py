@@ -46,6 +46,9 @@ class MetroDisplay:
         # Try to find and load fonts
         self.load_fonts()
 
+        # Define custom 5x7 pixel font for better LED matrix readability
+        self.setup_5x7_font()
+
         # Colors with adjusted brightness for better contrast
         self.colors = {
             "normal": (0, 255, 0),  # Green
@@ -312,6 +315,89 @@ class MetroDisplay:
             outline=color,
         )
 
+    def setup_5x7_font(self):
+        """Setup custom 5x7 pixel font optimized for LED matrix displays.
+        Each character is represented by 5 bytes, each byte for a column of 7 pixels.
+        """
+        # Define the 5x7 font data - each character is 5 columns of 7 bits
+        # Format: Each character is represented by 5 bytes, each byte for a column
+        # 1 means LED on, 0 means LED off
+        self.font_5x7 = {
+            # Numbers
+            "0": [0x3E, 0x51, 0x49, 0x45, 0x3E],  # 0
+            "1": [0x00, 0x42, 0x7F, 0x40, 0x00],  # 1
+            "2": [0x42, 0x61, 0x51, 0x49, 0x46],  # 2
+            "3": [0x21, 0x41, 0x45, 0x4B, 0x31],  # 3
+            "4": [0x18, 0x14, 0x12, 0x7F, 0x10],  # 4
+            "5": [0x27, 0x45, 0x45, 0x45, 0x39],  # 5
+            "6": [0x3C, 0x4A, 0x49, 0x49, 0x30],  # 6
+            "7": [0x01, 0x71, 0x09, 0x05, 0x03],  # 7
+            "8": [0x36, 0x49, 0x49, 0x49, 0x36],  # 8
+            "9": [0x06, 0x49, 0x49, 0x29, 0x1E],  # 9
+            # Special characters
+            "-": [0x08, 0x08, 0x08, 0x08, 0x08],  # -
+            ":": [0x00, 0x36, 0x36, 0x00, 0x00],  # :
+            "!": [0x00, 0x00, 0x5F, 0x00, 0x00],  # !
+            " ": [0x00, 0x00, 0x00, 0x00, 0x00],  # Space
+            # Letters - just the ones we need
+            "A": [0x7E, 0x11, 0x11, 0x11, 0x7E],  # A
+            "E": [0x7F, 0x49, 0x49, 0x49, 0x41],  # E
+            "F": [0x7F, 0x09, 0x09, 0x09, 0x01],  # F
+            "G": [0x3E, 0x41, 0x49, 0x49, 0x3A],  # G
+            "I": [0x00, 0x41, 0x7F, 0x41, 0x00],  # I
+            "K": [0x7F, 0x08, 0x14, 0x22, 0x41],  # K
+            "L": [0x7F, 0x40, 0x40, 0x40, 0x40],  # L
+            "M": [0x7F, 0x02, 0x0C, 0x02, 0x7F],  # M
+            "N": [0x7F, 0x04, 0x08, 0x10, 0x7F],  # N
+            "O": [0x3E, 0x41, 0x41, 0x41, 0x3E],  # O
+            "P": [0x7F, 0x09, 0x09, 0x09, 0x06],  # P
+            "R": [0x7F, 0x09, 0x19, 0x29, 0x46],  # R
+            "T": [0x01, 0x01, 0x7F, 0x01, 0x01],  # T
+            "W": [0x7F, 0x20, 0x18, 0x20, 0x7F],  # W
+            "Y": [0x07, 0x08, 0x70, 0x08, 0x07],  # Y
+        }
+
+        # Add lowercase versions of letters (for convenience)
+        lowercase_letters = {}
+        for char, pattern in self.font_5x7.items():
+            if char.isalpha():
+                lowercase_letters[char.lower()] = pattern
+        self.font_5x7.update(lowercase_letters)
+
+    def draw_5x7_char(self, x, y, char, color, background=None):
+        """Draw a single character from the 5x7 font."""
+        if char not in self.font_5x7:
+            # Default to space if character not in font
+            char = " "
+
+        char_data = self.font_5x7[char]
+
+        # Draw background if specified
+        if background:
+            self.draw.rectangle([(x, y), (x + 5, y + 7)], fill=background)
+
+        # Draw each column of the character
+        for col in range(5):
+            column_data = char_data[col]
+            for row in range(7):
+                # Check if this pixel should be lit (bit is set)
+                if column_data & (1 << row):
+                    self.draw.point((x + col, y + row), fill=color)
+
+        # Return width of character (5 pixels + 1 pixel spacing)
+        return 6
+
+    def draw_5x7_text(self, x, y, text, color, background=None):
+        """Draw text using the 5x7 font."""
+        cursor_x = x
+        for char in text:
+            if cursor_x + 5 > self.image.width:  # Stop if we run out of space
+                break
+            char_width = self.draw_5x7_char(cursor_x, y, char, color, background)
+            cursor_x += char_width
+
+        return cursor_x - x  # Return total width
+
     def update_display(self, station_data):
         """Update the display with new station data."""
         try:
@@ -327,34 +413,24 @@ class MetroDisplay:
             self.draw = new_draw
             self.image = new_image
 
-            # Adjust spacing based on whether we're using a pixel font (Terminus)
-            if hasattr(self, "using_pixel_font") and self.using_pixel_font:
-                # Terminus font is larger and clearer on LED matrices
-                period_y = 1
-                lines_start_y = 10
-                line_spacing = 10
-            else:
-                # Smaller TrueType fonts need different spacing
-                period_y = 1
-                lines_start_y = 8
-                line_spacing = 9
+            # Clear the buffer
+            self.draw.rectangle([(0, 0), (63, 31)], fill=self.colors["off"])
 
-            # Draw time period (first row) with appropriate font size - add contrast background
+            # Draw time period (first row) with appropriate font size
             period_color = (
                 self.colors["weekend"]
                 if station_data["current_time_period"] == "weekend"
                 else self.colors["white"]
             )
-            self.draw_text(
-                station_data["current_time_period"].upper(),
-                2,  # More offset for cleaner display
-                period_y,
-                period_color,
-                self.font_small,
-            )
+
+            # Draw time period using 5x7 font
+            period_text = station_data["current_time_period"].upper()
+            self.draw_5x7_text(2, 2, period_text, period_color)
 
             # Draw line statuses (remaining rows)
-            y_pos = lines_start_y
+            y_pos = 12  # Start position for line statuses
+            line_spacing = 10  # Space between lines
+
             for line_number, line_data in station_data["lines"].items():
                 # Determine alert status for visual indicator
                 has_alert = line_data["status"] == "alert"
@@ -377,23 +453,20 @@ class MetroDisplay:
                 # Format the frequency text more clearly
                 freq = line_data["current_frequency"]
                 if has_alert:
-                    alert_indicator = "!"
+                    freq_text = f"  {freq}!"
                 else:
-                    alert_indicator = ""
+                    freq_text = f"  {freq}"
 
-                # Create line status text with simplified formatting
-                line_text = f"  {freq}{alert_indicator}"
-
-                # Draw the line status in white (regardless of status)
+                # Draw the line status text in white (or red for alerts)
                 text_color = self.colors["white"]
                 if has_alert:
-                    # For alerts, use red for the whole text
                     text_color = self.colors["alert"]
 
-                # Draw text with background for improved contrast
-                self.draw_text(line_text, 4, y_pos, text_color, self.font_small)
+                # Draw frequency text using 5x7 font
+                self.draw_5x7_text(10, y_pos, freq_text, text_color)
 
-                y_pos += line_spacing  # Adjusted spacing for better readability
+                # Move to next line
+                y_pos += line_spacing
 
             # Restore original drawing surfaces
             self.draw = original_draw
