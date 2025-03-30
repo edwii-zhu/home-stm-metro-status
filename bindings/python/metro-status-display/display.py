@@ -2,7 +2,7 @@ import time
 import sys
 import signal
 from rgbmatrix import RGBMatrix, RGBMatrixOptions
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops
 import json
 import logging
 import os
@@ -22,19 +22,19 @@ class MetroDisplay:
         self.options.chain_length = 1
         self.options.parallel = 1
         self.options.hardware_mapping = "regular"
-        self.options.gpio_slowdown = 5  # Increased from 4 to 5 for more stable timing
+        self.options.gpio_slowdown = 7  # Further increased for maximum stability
         self.options.drop_privileges = True
-        self.options.brightness = 40  # Reduced from 50 to lower power draw
+        self.options.brightness = 30  # Further reduced for stability
 
-        # Lower refresh rate and adjust timing
-        self.options.pwm_bits = 7  # Reduced from 8 for more stable operation
-        self.options.pwm_lsb_nanoseconds = (
-            200  # Increased from 130 for more stable timing
-        )
-        self.options.limit_refresh_rate_hz = 60  # Reduced from 100Hz to 60Hz
-        self.options.scan_mode = 0  # Changed to 0 for more stable progressive scanning
-        self.options.multiplexing = 0  # Disable multiplexing for simpler operation
-        self.options.show_refresh_rate = 1  # Keep for debugging
+        # Aggressive optimization for stability
+        self.options.pwm_bits = 6  # Minimal PWM bits for stability
+        self.options.pwm_lsb_nanoseconds = 300  # Significantly increased timing
+        self.options.limit_refresh_rate_hz = 30  # Very conservative refresh rate
+        self.options.scan_mode = 0  # Progressive scan
+        self.options.multiplexing = 0  # No multiplexing
+        self.options.disable_hardware_pulsing = True  # More stable but uses more CPU
+        self.options.show_refresh_rate = 0  # Disable for production
+        self.options.inverse_colors = False
 
         # Initialize the matrix with error handling
         try:
@@ -47,8 +47,10 @@ class MetroDisplay:
             )
             sys.exit(1)
 
+        # Initialize display buffers
         self.image = Image.new("RGB", (64, 32))
         self.draw = ImageDraw.Draw(self.image)
+        self.prev_image = None  # Store previous frame for caching
 
         # Define custom 5x7 pixel font and colors
         self.setup_5x7_font()
@@ -118,31 +120,77 @@ class MetroDisplay:
         if char not in self.font_5x7:
             char = " "
 
-        if background:
-            self.draw.rectangle([(x, y), (x + 5, y + 7)], fill=background)
+        # Check boundaries to avoid unnecessary drawing
+        if x < 0 or x >= self.image.width or y < 0 or y >= self.image.height:
+            return 6  # Skip if outside boundaries
 
+        # Draw background if specified (rectangle is faster than individual pixels)
+        if background:
+            self.draw.rectangle([(x, y), (x + 4, y + 6)], fill=background)
+
+        # Get character data
         char_data = self.font_5x7[char]
+
+        # Pre-calculate coordinates for drawing to reduce calculations in the loop
         for col in range(5):
             column_data = char_data[col]
-            for row in range(7):
-                if column_data & (1 << row):
-                    self.draw.point((x + col, y + row), fill=color)
+            x_pos = x + col
+
+            # Skip if column is outside boundaries
+            if x_pos >= self.image.width:
+                continue
+
+            # Use a more efficient approach - bitshift checking
+            if column_data:  # Only process if column has any pixels
+                for row in range(7):
+                    if column_data & (1 << row):
+                        y_pos = y + row
+                        if y_pos < self.image.height:
+                            self.draw.point((x_pos, y_pos), fill=color)
 
         return 6  # Character width including spacing
 
     def draw_5x7_text(self, x, y, text, color, background=None):
         """Draw text using the 5x7 font."""
+        # Early exit for empty strings or out-of-bounds text
+        if not text or y >= self.image.height or y + 7 < 0 or x >= self.image.width:
+            return 0
+
         cursor_x = x
         for char in text:
-            if cursor_x + 5 > self.image.width:
+            # Stop if we've gone past the right edge
+            if cursor_x >= self.image.width:
                 break
-            cursor_x += self.draw_5x7_char(cursor_x, y, char, color, background)
-        return cursor_x - x
+
+            # Draw the character and advance cursor
+            char_width = self.draw_5x7_char(cursor_x, y, char, color, background)
+            cursor_x += char_width
+
+        return cursor_x - x  # Return the width of text drawn
 
     def clear(self):
-        """Clear the display."""
-        self.draw.rectangle([(0, 0), (63, 31)], fill=self.colors["off"])
-        self.matrix.SetImage(self.image)
+        """Clear the display safely."""
+        try:
+            # Create a blank image
+            blank_image = Image.new("RGB", (64, 32), self.colors["off"])
+
+            # Set the image directly - more efficient than drawing first
+            self.image = blank_image
+            self.matrix.SetImage(self.image)
+            self.prev_image = blank_image  # Update cache
+
+            # Also update the draw object for future operations
+            self.draw = ImageDraw.Draw(self.image)
+
+            # Small delay to ensure the clear is processed properly
+            time.sleep(0.05)
+        except Exception as e:
+            logging.error(f"Error clearing display: {e}")
+            try:
+                # Fallback clear method using direct matrix clear
+                self.matrix.Clear()
+            except:
+                pass
 
     def draw_circle(self, x, y, radius, color):
         """Draw a filled circle at the specified coordinates."""
@@ -153,19 +201,44 @@ class MetroDisplay:
         )
 
     def show_error(self):
-        """Display error state on the LED matrix."""
+        """Display error state on the LED matrix safely."""
         try:
-            self.clear()
-            self.draw_5x7_text(12, 12, "ERROR", self.colors["alert"])
-            self.matrix.SetImage(self.image)
+            # Create a new error image rather than modifying current
+            error_image = Image.new("RGB", (64, 32), self.colors["off"])
+            error_draw = ImageDraw.Draw(error_image)
+
+            # Use a simpler approach - draw a red rectangle with ERROR text
+            error_draw.rectangle(
+                [(8, 10), (56, 22)], fill=(20, 0, 0)
+            )  # Dark red background
+
+            # Temporarily switch drawing surface
+            old_draw, old_image = self.draw, self.image
+            self.draw, self.image = error_draw, error_image
+
+            # Draw text
+            self.draw_5x7_text(14, 12, "ERROR", self.colors["alert"])
+
+            # Switch back
+            self.draw, self.image = old_draw, old_image
+
+            # Set the image
+            self.matrix.SetImage(error_image)
+
+            # Keep track of the displayed frame
+            self.prev_image = error_image
         except Exception as e:
             logging.error(f"Failed to show error screen: {e}")
             try:
-                self.draw.rectangle([(0, 0), (63, 31)], fill=(0, 0, 0))
-                self.draw.rectangle([(10, 10), (54, 22)], fill=(255, 0, 0))
-                self.matrix.SetImage(self.image)
-            except:
+                # Last resort - try basic matrix operations
                 self.matrix.Clear()
+                time.sleep(0.1)
+                # This uses a direct matrix method rather than PIL for reliability
+                for y in range(10, 22):
+                    for x in range(10, 54):
+                        self.matrix.SetPixel(x, y, 255, 0, 0)
+            except Exception as e2:
+                logging.error(f"Critical display failure: {e2}")
 
     def signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
@@ -228,9 +301,23 @@ class MetroDisplay:
             # Restore original drawing surfaces
             self.draw, self.image = temp_draw, temp_image
 
-            # Atomically update the display with the new frame
-            self.image = new_image
-            self.matrix.SetImage(self.image)
+            # Check if the frame has changed
+            update_needed = True
+            if self.prev_image:
+                # Compare with previous frame
+                if ImageChops.difference(new_image, self.prev_image).getbbox() is None:
+                    logging.info("No display update needed - frame unchanged")
+                    update_needed = False
+
+            # Only update if needed
+            if update_needed:
+                # Atomically update the display with the new frame
+                self.image = new_image
+                self.matrix.SetImage(self.image)
+                logging.info("Display updated with new frame")
+
+            # Store the current frame for next comparison
+            self.prev_image = new_image
 
         except Exception as e:
             logging.error(f"Error updating display: {e}")
@@ -239,43 +326,97 @@ class MetroDisplay:
 
 def main():
     """Main function to run the display."""
+    display = None
     try:
-        display = MetroDisplay()
-        logging.info("Display initialized")
+        # Initialize display with retry mechanism
+        retry_count = 0
+        max_retries = 3
 
+        while retry_count < max_retries:
+            try:
+                display = MetroDisplay()
+                logging.info("Display initialized successfully")
+                break
+            except Exception as e:
+                retry_count += 1
+                logging.error(
+                    f"Failed to initialize display (attempt {retry_count}/{max_retries}): {e}"
+                )
+                if retry_count >= max_retries:
+                    logging.error("Max retries reached, exiting")
+                    sys.exit(1)
+                time.sleep(2)  # Wait before retry
+
+        # Cache for station data to avoid unnecessary processing
+        last_data_hash = None
+
+        # Main processing loop
         try:
             while True:
                 try:
-                    line = sys.stdin.readline()
-                    if not line:
-                        break
+                    # Read data without blocking too long
+                    line = ""
+                    if sys.stdin.isatty():
+                        # Interactive mode
+                        line = sys.stdin.readline()
+                    else:
+                        # Pipe mode - check if data is available
+                        import select
 
+                        if select.select([sys.stdin], [], [], 0.1)[0]:
+                            line = sys.stdin.readline()
+
+                    if not line:
+                        time.sleep(0.5)  # Sleep briefly if no data
+                        continue
+
+                    # Process data
                     station_data = json.loads(line)
-                    display.update_display(station_data)
-                    # Add a small delay after each update to let the display stabilize
-                    time.sleep(0.1)
-                    time.sleep(30)  # Regular update interval
+
+                    # Check if data has changed
+                    current_hash = hash(json.dumps(station_data, sort_keys=True))
+                    if current_hash != last_data_hash:
+                        display.update_display(station_data)
+                        last_data_hash = current_hash
+                    else:
+                        logging.info("Data unchanged, skipping display update")
+
+                    # Stabilize then sleep until next update
+                    time.sleep(0.2)  # Stabilization delay
+                    time.sleep(29.8)  # Remaining time to 30 seconds
 
                 except json.JSONDecodeError as e:
                     logging.error(f"Error parsing JSON: {e}")
-                    display.show_error()
+                    if display:
+                        display.show_error()
                     time.sleep(5)
                 except Exception as e:
                     logging.error(f"Unexpected error: {e}")
-                    display.show_error()
+                    if display:
+                        display.show_error()
                     time.sleep(5)
 
         except KeyboardInterrupt:
             logging.info("Display stopped by user")
         finally:
-            # Ensure clean shutdown
-            time.sleep(0.1)  # Let any pending operations complete
-            display.clear()
-            time.sleep(0.1)  # Let the clear operation complete
-            display.matrix.Clear()
+            # Clean shutdown with retry
+            if display:
+                try:
+                    time.sleep(0.2)  # Let any pending operations complete
+                    display.clear()
+                    time.sleep(0.2)  # Let the clear operation complete
+                    display.matrix.Clear()
+                    logging.info("Display shut down cleanly")
+                except Exception as e:
+                    logging.error(f"Error during shutdown: {e}")
 
     except Exception as e:
-        logging.error(f"Failed to start display: {e}")
+        logging.error(f"Critical error: {e}")
+        if display:
+            try:
+                display.matrix.Clear()
+            except:
+                pass
         sys.exit(1)
 
 
