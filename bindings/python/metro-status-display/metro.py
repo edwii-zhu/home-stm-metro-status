@@ -112,21 +112,23 @@ def get_current_time_period():
     current_time = datetime.now().time()
     current_weekday = datetime.now().weekday() < 5  # True for Monday-Friday
 
+    # First check if it's a weekend
     if not current_weekday:
         return "weekend"
 
+    # For weekdays, determine the time period
     if (
         current_time >= datetime.strptime("06:30", "%H:%M").time()
         and current_time < datetime.strptime("09:30", "%H:%M").time()
     ):
-        return "morning_peak"
+        return "am_peak"
     elif (
         current_time >= datetime.strptime("15:30", "%H:%M").time()
         and current_time < datetime.strptime("18:30", "%H:%M").time()
     ):
-        return "afternoon_peak"
+        return "pm_peak"
     elif current_time >= datetime.strptime("21:00", "%H:%M").time():
-        return "late_evening"
+        return "evening"
     else:
         return "off_peak"
 
