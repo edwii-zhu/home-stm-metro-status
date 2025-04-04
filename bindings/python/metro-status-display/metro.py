@@ -40,17 +40,17 @@ BERRI_UQAM = {
     },
     "frequencies": {
         "1": {  # Green Line
-            "morning_peak": "2-4 minutes",
-            "afternoon_peak": "2-4 minutes",
+            "am_peak": "2-4 minutes",
+            "pm_peak": "2-4 minutes",
             "off_peak": "3-5 minutes",
-            "late_evening": "8-10 minutes",
+            "evening": "8-10 minutes",
             "weekend": "4-8 minutes",
         },
         "2": {  # Orange Line
-            "morning_peak": "2-4 minutes",
-            "afternoon_peak": "2-4 minutes",
+            "am_peak": "2-4 minutes",
+            "pm_peak": "2-4 minutes",
             "off_peak": "3-5 minutes",
-            "late_evening": "8-10 minutes",
+            "evening": "8-10 minutes",
             "weekend": "4-8 minutes",
         },
     },
@@ -58,10 +58,10 @@ BERRI_UQAM = {
 
 # Time periods for frequency display
 TIME_PERIODS = {
-    "morning_peak": "6:30 AM - 9:30 AM",
-    "afternoon_peak": "3:30 PM - 6:30 PM",
+    "am_peak": "6:30 AM - 9:30 AM",
+    "pm_peak": "3:30 PM - 6:30 PM",
     "off_peak": "9:30 AM - 3:30 PM",
-    "late_evening": "9:00 PM - Close",
+    "evening": "9:00 PM - Close",
 }
 
 
